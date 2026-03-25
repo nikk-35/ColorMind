@@ -262,7 +262,6 @@ export default function App() {
   const [targetColors, setTargetColors] = useState<HSBColor[]>([]);
   const [guessColors, setGuessColors] = useState<HSBColor[]>([]);
   const [currentColorIndex, setCurrentColorIndex] = useState(0);
-  const [memorizeColorIndex, setMemorizeColorIndex] = useState(0);
   const [currentGuess, setCurrentGuess] = useState<HSBColor>({ h: 180, s: 50, b: 75 });
   const [memorizeTime, setMemorizeTime] = useState(3);
   const [scores, setScores] = useState<number[]>([]);
@@ -292,7 +291,7 @@ export default function App() {
     setTargetColors(colors);
     setGuessColors([]);
     setCurrentColorIndex(0);
-    setMemorizeColorIndex(0);
+    
     setCurrentGuess({ h: 180, s: 50, b: 75 });
     setScores([]);
     setMemorizeTime(3);
@@ -311,7 +310,7 @@ export default function App() {
     setTargetColors(colors);
     setGuessColors([]);
     setCurrentColorIndex(0);
-    setMemorizeColorIndex(0);
+    
     setCurrentGuess({ h: 180, s: 50, b: 75 });
     setScores([]);
     setMemorizeTime(3);
@@ -374,41 +373,40 @@ export default function App() {
     setTargetColors(colors);
     setGuessColors([]);
     setCurrentColorIndex(0);
-    setMemorizeColorIndex(0);
+    
     setCurrentGuess({ h: 180, s: 50, b: 75 });
     setScores([]);
     setMemorizeTime(3);
     setPhase('memorize');
   }, []);
 
-  // Memorize countdown - one color at a time
+  // Memorize countdown - show color, then go to recall for that color
   useEffect(() => {
     if (phase !== 'memorize') return;
     
     if (memorizeTime <= 0) {
-      // Move to next color or recall phase
-      if (memorizeColorIndex < NUM_COLORS - 1) {
-        setMemorizeColorIndex((i) => i + 1);
-        setMemorizeTime(3);
-      } else {
-        setPhase('recall');
-      }
+      // Go to recall for this color
+      setPhase('recall');
       return;
     }
     
     const timer = setTimeout(() => setMemorizeTime((t) => t - 1), 1000);
     return () => clearTimeout(timer);
-  }, [phase, memorizeTime, memorizeColorIndex]);
+  }, [phase, memorizeTime]);
 
-  // Submit guess
+  // Submit guess - then show next color or results
   const submitGuess = useCallback(() => {
     const newGuesses = [...guessColors, currentGuess];
     setGuessColors(newGuesses);
 
     if (currentColorIndex < NUM_COLORS - 1) {
+      // Show next color
       setCurrentColorIndex((i) => i + 1);
       setCurrentGuess({ h: 180, s: 50, b: 75 });
+      setMemorizeTime(3);
+      setPhase('memorize'); // Go back to memorize for next color
     } else {
+      // All colors done - show results
       const newScores = targetColors.map((target, i) =>
         calculateScore(target, newGuesses[i])
       );
@@ -602,7 +600,7 @@ export default function App() {
         )}
 
         {/* MEMORIZE */}
-        {phase === 'memorize' && targetColors[memorizeColorIndex] && (
+        {phase === 'memorize' && targetColors[currentColorIndex] && (
           <>
             <View style={styles.progressContainer}>
               {Array.from({ length: NUM_COLORS }).map((_, i) => (
@@ -610,19 +608,19 @@ export default function App() {
                   key={i}
                   style={[
                     styles.progressDot,
-                    i < memorizeColorIndex && styles.progressDotComplete,
-                    i === memorizeColorIndex && styles.progressDotActive,
+                    i < currentColorIndex && styles.progressDotComplete,
+                    i === currentColorIndex && styles.progressDotActive,
                   ]}
                 />
               ))}
             </View>
             
-            <Text style={styles.phaseTitle}>Color {memorizeColorIndex + 1} of {NUM_COLORS}</Text>
+            <Text style={styles.phaseTitle}>Memorize Color {currentColorIndex + 1}</Text>
             <Text style={styles.timer}>{memorizeTime}</Text>
             
             <View style={styles.memorizeColorContainer}>
               <ColorSwatch 
-                color={targetColors[memorizeColorIndex]} 
+                color={targetColors[currentColorIndex]} 
                 size={width * 0.5} 
                 glow 
               />
