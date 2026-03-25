@@ -97,6 +97,31 @@ const generateColors = (count: number, seed?: number): HSBColor[] => {
   });
 };
 
+// Get percentile based on score (estimated distribution)
+const getPercentile = (score: number): number => {
+  if (score >= 47) return 1;
+  if (score >= 45) return 3;
+  if (score >= 43) return 5;
+  if (score >= 40) return 10;
+  if (score >= 37) return 20;
+  if (score >= 34) return 30;
+  if (score >= 30) return 45;
+  if (score >= 26) return 60;
+  if (score >= 22) return 75;
+  if (score >= 18) return 85;
+  if (score >= 14) return 92;
+  return 97;
+};
+
+const getPercentileEmoji = (percentile: number): string => {
+  if (percentile <= 5) return '🏆';
+  if (percentile <= 10) return '🥇';
+  if (percentile <= 20) return '🥈';
+  if (percentile <= 35) return '🥉';
+  if (percentile <= 50) return '⭐';
+  return '🎨';
+};
+
 const colorDistance = (c1: HSBColor, c2: HSBColor): number => {
   const hDiff = Math.min(Math.abs(c1.h - c2.h), 360 - Math.abs(c1.h - c2.h)) / 180;
   const sDiff = Math.abs(c1.s - c2.s) / 100;
@@ -424,10 +449,11 @@ export default function App() {
   // Share results
   const shareResults = async () => {
     const total = scores.reduce((a, b) => a + b, 0);
-    const emoji = total >= 40 ? '🏆' : total >= 30 ? '🎯' : total >= 20 ? '👍' : '🎨';
+    const percentile = getPercentile(total);
+    const emoji = getPercentileEmoji(percentile);
     const text = mode === 'daily' 
-      ? `ColorMind Daily ${emoji}\n${total.toFixed(1)}/50\n\nCan you beat my score?\nhttps://colormind.app`
-      : `ColorMind ${emoji}\n${total.toFixed(1)}/50\n\nTry it: https://colormind.app`;
+      ? `ColorMind Daily ${emoji}\n${total.toFixed(1)}/50 • Top ${percentile}%\n\nCan you beat my score?\nhttps://colormind.app`
+      : `ColorMind ${emoji}\n${total.toFixed(1)}/50 • Top ${percentile}%\n\nTry it: https://colormind.app`;
     
     try {
       await Share.share({ message: text });
@@ -678,6 +704,13 @@ export default function App() {
             
             <Text style={styles.totalScore}>{totalScore.toFixed(1)}</Text>
             <Text style={styles.totalScoreLabel}>out of 50</Text>
+            
+            <View style={styles.percentileContainer}>
+              <Text style={styles.percentileEmoji}>{getPercentileEmoji(getPercentile(totalScore))}</Text>
+              <Text style={styles.percentileText}>
+                Top {getPercentile(totalScore)}% of players
+              </Text>
+            </View>
             
             <View style={styles.resultsGrid}>
               {targetColors.map((target, i) => (
@@ -1107,7 +1140,26 @@ const styles = StyleSheet.create({
     fontSize: 18,
     color: 'rgba(255,255,255,0.4)',
     textAlign: 'center',
+    marginBottom: 12,
+  },
+  percentileContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(41, 151, 255, 0.1)',
+    borderRadius: 100,
+    paddingVertical: 12,
+    paddingHorizontal: 20,
     marginBottom: 24,
+    gap: 8,
+  },
+  percentileEmoji: {
+    fontSize: 20,
+  },
+  percentileText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#2997ff',
   },
   resultsGrid: {
     marginBottom: 24,
