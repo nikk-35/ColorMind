@@ -262,8 +262,9 @@ export default function App() {
   const [targetColors, setTargetColors] = useState<HSBColor[]>([]);
   const [guessColors, setGuessColors] = useState<HSBColor[]>([]);
   const [currentColorIndex, setCurrentColorIndex] = useState(0);
+  const [memorizeColorIndex, setMemorizeColorIndex] = useState(0);
   const [currentGuess, setCurrentGuess] = useState<HSBColor>({ h: 180, s: 50, b: 75 });
-  const [memorizeTime, setMemorizeTime] = useState(5);
+  const [memorizeTime, setMemorizeTime] = useState(3);
   const [scores, setScores] = useState<number[]>([]);
   
   // Multiplayer state
@@ -291,9 +292,10 @@ export default function App() {
     setTargetColors(colors);
     setGuessColors([]);
     setCurrentColorIndex(0);
+    setMemorizeColorIndex(0);
     setCurrentGuess({ h: 180, s: 50, b: 75 });
     setScores([]);
-    setMemorizeTime(5);
+    setMemorizeTime(3);
     setMode('solo');
     setPhase('memorize');
   }, []);
@@ -309,9 +311,10 @@ export default function App() {
     setTargetColors(colors);
     setGuessColors([]);
     setCurrentColorIndex(0);
+    setMemorizeColorIndex(0);
     setCurrentGuess({ h: 180, s: 50, b: 75 });
     setScores([]);
-    setMemorizeTime(5);
+    setMemorizeTime(3);
     setMode('daily');
     setPhase('memorize');
   }, [dailyPlayed]);
@@ -371,22 +374,31 @@ export default function App() {
     setTargetColors(colors);
     setGuessColors([]);
     setCurrentColorIndex(0);
+    setMemorizeColorIndex(0);
     setCurrentGuess({ h: 180, s: 50, b: 75 });
     setScores([]);
-    setMemorizeTime(5);
+    setMemorizeTime(3);
     setPhase('memorize');
   }, []);
 
-  // Memorize countdown
+  // Memorize countdown - one color at a time
   useEffect(() => {
     if (phase !== 'memorize') return;
+    
     if (memorizeTime <= 0) {
-      setPhase('recall');
+      // Move to next color or recall phase
+      if (memorizeColorIndex < NUM_COLORS - 1) {
+        setMemorizeColorIndex((i) => i + 1);
+        setMemorizeTime(3);
+      } else {
+        setPhase('recall');
+      }
       return;
     }
+    
     const timer = setTimeout(() => setMemorizeTime((t) => t - 1), 1000);
     return () => clearTimeout(timer);
-  }, [phase, memorizeTime]);
+  }, [phase, memorizeTime, memorizeColorIndex]);
 
   // Submit guess
   const submitGuess = useCallback(() => {
@@ -590,19 +602,34 @@ export default function App() {
         )}
 
         {/* MEMORIZE */}
-        {phase === 'memorize' && (
+        {phase === 'memorize' && targetColors[memorizeColorIndex] && (
           <>
-            <Text style={styles.phaseTitle}>Memorize these colors</Text>
+            <View style={styles.progressContainer}>
+              {Array.from({ length: NUM_COLORS }).map((_, i) => (
+                <View
+                  key={i}
+                  style={[
+                    styles.progressDot,
+                    i < memorizeColorIndex && styles.progressDotComplete,
+                    i === memorizeColorIndex && styles.progressDotActive,
+                  ]}
+                />
+              ))}
+            </View>
+            
+            <Text style={styles.phaseTitle}>Color {memorizeColorIndex + 1} of {NUM_COLORS}</Text>
             <Text style={styles.timer}>{memorizeTime}</Text>
             
-            <View style={styles.colorGrid}>
-              {targetColors.map((color, i) => (
-                <ColorSwatch key={i} color={color} size={(width - 80) / 3} glow />
-              ))}
+            <View style={styles.memorizeColorContainer}>
+              <ColorSwatch 
+                color={targetColors[memorizeColorIndex]} 
+                size={width * 0.5} 
+                glow 
+              />
             </View>
 
             <Text style={styles.hint}>
-              Pay attention to hue, saturation, and brightness
+              Remember this color!
             </Text>
           </>
         )}
@@ -948,6 +975,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 16,
     marginBottom: 24,
+  },
+  memorizeColorContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginVertical: 40,
   },
   hint: {
     fontSize: 14,
