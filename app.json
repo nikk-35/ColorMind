@@ -15,32 +15,25 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.weblity.colormind",
-      "infoPlist": {
-        "GADApplicationIdentifier": "ca-app-pub-XXXXXXXXXXXXXXXX~XXXXXXXXXX",
-        "SKAdNetworkItems": [
-          { "SKAdNetworkIdentifier": "cstr6suwn9.skadnetwork" }
-        ]
-      }
+      "buildNumber": "1"
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#0a0a1a"
       },
-      "package": "com.weblity.colormind"
+      "package": "com.weblity.colormind",
+      "versionCode": 1
     },
     "web": {
       "favicon": "./assets/favicon.png",
       "bundler": "metro"
     },
-    "plugins": [
-      [
-        "react-native-google-mobile-ads",
-        {
-          "androidAppId": "ca-app-pub-XXXXXXXXXXXXXXXX~XXXXXXXXXX",
-          "iosAppId": "ca-app-pub-XXXXXXXXXXXXXXXX~XXXXXXXXXX"
-        }
-      ]
-    ]
+    "plugins": [],
+    "extra": {
+      "eas": {
+        "projectId": "WIRD_AUTOMATISCH_GEFÜLLT"
+      }
+    }
   }
 }

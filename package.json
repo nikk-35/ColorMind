@@ -12,6 +12,7 @@
     "@expo/metro-runtime": "~55.0.6",
     "@react-native-async-storage/async-storage": "2.2.0",
     "@supabase/supabase-js": "^2.100.0",
+    "eas-cli": "^18.4.0",
     "expo": "~55.0.8",
     "expo-blur": "~55.0.10",
     "expo-linear-gradient": "~55.0.9",
