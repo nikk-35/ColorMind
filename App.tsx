@@ -9,6 +9,7 @@ import {
   ScrollView,
   Share,
 } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 
 const { width } = Dimensions.get('window');
 
@@ -37,28 +38,14 @@ const hsbToHex = (h: number, s: number, b: number): string => {
   return `#${toHex(f(5))}${toHex(f(3))}${toHex(f(1))}`;
 };
 
-const seededRandom = (seed: number) => {
-  const x = Math.sin(seed) * 10000;
-  return x - Math.floor(x);
-};
+const randomColor = (): HSBColor => ({
+  h: Math.floor(Math.random() * 360),
+  s: Math.floor(Math.random() * 60) + 40,
+  b: Math.floor(Math.random() * 50) + 50,
+});
 
-const randomColor = (seed?: number): HSBColor => {
-  const rand = seed !== undefined ? () => seededRandom(seed++) : Math.random;
-  return {
-    h: Math.floor(rand() * 360),
-    s: Math.floor(rand() * 60) + 40,
-    b: Math.floor(rand() * 50) + 50,
-  };
-};
-
-const generateColors = (count: number, seed?: number): HSBColor[] => {
-  let s = seed;
-  return Array.from({ length: count }, () => {
-    const color = randomColor(s);
-    if (s !== undefined) s += 3;
-    return color;
-  });
-};
+const generateColors = (count: number): HSBColor[] => 
+  Array.from({ length: count }, () => randomColor());
 
 const colorDistance = (c1: HSBColor, c2: HSBColor): number => {
   const hDiff = Math.min(Math.abs(c1.h - c2.h), 360 - Math.abs(c1.h - c2.h)) / 180;
@@ -81,36 +68,85 @@ const getPercentile = (score: number): number => {
   if (score >= 34) return 30;
   if (score >= 30) return 45;
   if (score >= 26) return 60;
-  if (score >= 22) return 75;
-  return 85;
+  return 75;
+};
+
+const getPercentileEmoji = (p: number): string => {
+  if (p <= 5) return '🏆';
+  if (p <= 10) return '🥇';
+  if (p <= 20) return '🥈';
+  if (p <= 35) return '🥉';
+  return '⭐';
 };
 
 // ============================================================================
-// SIMPLE SLIDER COMPONENT
+// GLASS CARD COMPONENT
 // ============================================================================
 
-const SimpleSlider: React.FC<{
+const GlassCard: React.FC<{ children: React.ReactNode; style?: any }> = ({ children, style }) => (
+  <View style={[styles.glassCard, style]}>
+    {children}
+  </View>
+);
+
+// ============================================================================
+// COLOR SWATCH COMPONENT
+// ============================================================================
+
+const ColorSwatch: React.FC<{ color: HSBColor; size?: number }> = ({ color, size = 60 }) => {
+  const hex = hsbToHex(color.h, color.s, color.b);
+  return (
+    <View style={[styles.swatch, { width: size, height: size, backgroundColor: hex }]}>
+      <LinearGradient
+        colors={['rgba(255,255,255,0.2)', 'transparent']}
+        style={styles.swatchShine}
+      />
+    </View>
+  );
+};
+
+// ============================================================================
+// SLIDER COMPONENT
+// ============================================================================
+
+const ColorSlider: React.FC<{
   label: string;
   value: number;
   max: number;
-  color: string;
+  colors: string[];
   onChange: (value: number) => void;
-}> = ({ label, value, max, color, onChange }) => {
+}> = ({ label, value, max, colors, onChange }) => {
+  const step = max === 360 ? 15 : 5;
+  
   return (
     <View style={styles.sliderContainer}>
       <Text style={styles.sliderLabel}>{label}</Text>
-      <View style={styles.sliderTrack}>
-        <View style={[styles.sliderFill, { width: `${(value / max) * 100}%`, backgroundColor: color }]} />
-      </View>
-      <View style={styles.sliderButtons}>
-        <TouchableOpacity style={styles.sliderBtn} onPress={() => onChange(Math.max(0, value - 10))}>
-          <Text style={styles.sliderBtnText}>-</Text>
+      <View style={styles.sliderRow}>
+        <TouchableOpacity 
+          style={styles.sliderBtn} 
+          onPress={() => onChange(Math.max(0, value - step))}
+        >
+          <Text style={styles.sliderBtnText}>−</Text>
         </TouchableOpacity>
-        <Text style={styles.sliderValue}>{value}</Text>
-        <TouchableOpacity style={styles.sliderBtn} onPress={() => onChange(Math.min(max, value + 10))}>
+        
+        <View style={styles.sliderTrackContainer}>
+          <LinearGradient
+            colors={colors as any}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
+            style={styles.sliderTrack}
+          />
+          <View style={[styles.sliderThumb, { left: `${(value / max) * 100}%` }]} />
+        </View>
+        
+        <TouchableOpacity 
+          style={styles.sliderBtn} 
+          onPress={() => onChange(Math.min(max, value + step))}
+        >
           <Text style={styles.sliderBtnText}>+</Text>
         </TouchableOpacity>
       </View>
+      <Text style={styles.sliderValue}>{value}</Text>
     </View>
   );
 };
@@ -141,7 +177,6 @@ export default function App() {
     setPhase('memorize');
   }, []);
 
-  // Memorize countdown
   useEffect(() => {
     if (phase !== 'memorize') return;
     if (memorizeTime <= 0) {
@@ -171,27 +206,42 @@ export default function App() {
   }, [currentGuess, guessColors, currentColorIndex, targetColors]);
 
   const totalScore = scores.reduce((a, b) => a + b, 0);
+  const percentile = getPercentile(totalScore);
 
   const shareResults = async () => {
-    const percentile = getPercentile(totalScore);
-    const text = `ColorMind 🎨\n${totalScore.toFixed(1)}/50 • Top ${percentile}%\n\nTry it: colormind.app`;
+    const emoji = getPercentileEmoji(percentile);
+    const text = `ColorMind ${emoji}\n${totalScore.toFixed(1)}/50 • Top ${percentile}%\n\nTry it: colormind.app`;
     try {
       await Share.share({ message: text });
-    } catch (e) {
-      console.log(e);
-    }
+    } catch (e) {}
   };
+
+  // Hue gradient colors
+  const hueColors = Array.from({ length: 7 }, (_, i) => hsbToHex(i * 60, 100, 100));
+  const satColors = [hsbToHex(currentGuess.h, 0, currentGuess.b), hsbToHex(currentGuess.h, 100, currentGuess.b)];
+  const briColors = [hsbToHex(currentGuess.h, currentGuess.s, 0), hsbToHex(currentGuess.h, currentGuess.s, 100)];
 
   return (
     <View style={styles.container}>
       <StatusBar barStyle="light-content" />
+      <LinearGradient
+        colors={['#0a0a1a', '#1a0a2e', '#0f1a2a']}
+        style={StyleSheet.absoluteFill}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+      />
+
+      {/* Floating Orbs */}
+      <View style={[styles.orb, styles.orb1]} />
+      <View style={[styles.orb, styles.orb2]} />
+      <View style={[styles.orb, styles.orb3]} />
 
       {/* Header */}
       <View style={styles.header}>
         <Text style={styles.logo}>Color<Text style={styles.logoAccent}>Mind</Text></Text>
         {phase !== 'menu' && (
           <TouchableOpacity onPress={() => setPhase('menu')}>
-            <Text style={styles.backButton}>✕</Text>
+            <Text style={styles.closeBtn}>✕</Text>
           </TouchableOpacity>
         )}
       </View>
@@ -203,15 +253,22 @@ export default function App() {
           <>
             <Text style={styles.tagline}>How well can you{'\n'}remember colors?</Text>
             
-            <View style={styles.card}>
-              <Text style={styles.cardText}>
-                We'll show you {NUM_COLORS} colors.{'\n'}
-                Memorize each one, then recreate it!
+            <GlassCard style={styles.infoCard}>
+              <Text style={styles.infoText}>
+                We'll show you {NUM_COLORS} colors for 3 seconds each.{'\n'}
+                Recreate them from memory!
               </Text>
-            </View>
+            </GlassCard>
 
-            <TouchableOpacity style={styles.playButton} onPress={startGame}>
-              <Text style={styles.playButtonText}>Play Solo 🎯</Text>
+            <TouchableOpacity onPress={startGame} activeOpacity={0.8}>
+              <LinearGradient
+                colors={['#2997ff', '#af52de']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={styles.primaryButton}
+              >
+                <Text style={styles.primaryButtonText}>🎯 Play Solo</Text>
+              </LinearGradient>
             </TouchableOpacity>
           </>
         )}
@@ -219,17 +276,25 @@ export default function App() {
         {/* MEMORIZE */}
         {phase === 'memorize' && targetColors[currentColorIndex] && (
           <>
+            <View style={styles.progressRow}>
+              {Array.from({ length: NUM_COLORS }).map((_, i) => (
+                <View
+                  key={i}
+                  style={[
+                    styles.progressDot,
+                    i < currentColorIndex && styles.progressDotDone,
+                    i === currentColorIndex && styles.progressDotActive,
+                  ]}
+                />
+              ))}
+            </View>
+            
             <Text style={styles.phaseTitle}>Memorize Color {currentColorIndex + 1}</Text>
             <Text style={styles.timer}>{memorizeTime}</Text>
             
-            <View style={[
-              styles.colorDisplay,
-              { backgroundColor: hsbToHex(
-                targetColors[currentColorIndex].h,
-                targetColors[currentColorIndex].s,
-                targetColors[currentColorIndex].b
-              )}
-            ]} />
+            <View style={styles.colorDisplayContainer}>
+              <ColorSwatch color={targetColors[currentColorIndex]} size={width * 0.6} />
+            </View>
 
             <Text style={styles.hint}>Remember this color!</Text>
           </>
@@ -238,39 +303,60 @@ export default function App() {
         {/* RECALL */}
         {phase === 'recall' && (
           <>
+            <View style={styles.progressRow}>
+              {Array.from({ length: NUM_COLORS }).map((_, i) => (
+                <View
+                  key={i}
+                  style={[
+                    styles.progressDot,
+                    i < currentColorIndex && styles.progressDotDone,
+                    i === currentColorIndex && styles.progressDotActive,
+                  ]}
+                />
+              ))}
+            </View>
+            
             <Text style={styles.phaseTitle}>Recreate Color {currentColorIndex + 1}</Text>
             
-            <View style={[
-              styles.colorDisplay,
-              { backgroundColor: hsbToHex(currentGuess.h, currentGuess.s, currentGuess.b) }
-            ]} />
+            <View style={styles.colorDisplayContainer}>
+              <ColorSwatch color={currentGuess} size={width * 0.4} />
+            </View>
 
-            <SimpleSlider
-              label="Hue"
-              value={currentGuess.h}
-              max={360}
-              color="#ff6b6b"
-              onChange={(v) => setCurrentGuess({ ...currentGuess, h: v })}
-            />
-            <SimpleSlider
-              label="Saturation"
-              value={currentGuess.s}
-              max={100}
-              color="#4ecdc4"
-              onChange={(v) => setCurrentGuess({ ...currentGuess, s: v })}
-            />
-            <SimpleSlider
-              label="Brightness"
-              value={currentGuess.b}
-              max={100}
-              color="#ffe66d"
-              onChange={(v) => setCurrentGuess({ ...currentGuess, b: v })}
-            />
+            <GlassCard>
+              <ColorSlider
+                label="Hue"
+                value={currentGuess.h}
+                max={360}
+                colors={hueColors}
+                onChange={(v) => setCurrentGuess({ ...currentGuess, h: v })}
+              />
+              <ColorSlider
+                label="Saturation"
+                value={currentGuess.s}
+                max={100}
+                colors={satColors}
+                onChange={(v) => setCurrentGuess({ ...currentGuess, s: v })}
+              />
+              <ColorSlider
+                label="Brightness"
+                value={currentGuess.b}
+                max={100}
+                colors={briColors}
+                onChange={(v) => setCurrentGuess({ ...currentGuess, b: v })}
+              />
+            </GlassCard>
 
-            <TouchableOpacity style={styles.playButton} onPress={submitGuess}>
-              <Text style={styles.playButtonText}>
-                {currentColorIndex < NUM_COLORS - 1 ? 'Next →' : 'See Results'}
-              </Text>
+            <TouchableOpacity onPress={submitGuess} activeOpacity={0.8}>
+              <LinearGradient
+                colors={['#2997ff', '#af52de']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={styles.primaryButton}
+              >
+                <Text style={styles.primaryButtonText}>
+                  {currentColorIndex < NUM_COLORS - 1 ? 'Next →' : 'See Results'}
+                </Text>
+              </LinearGradient>
             </TouchableOpacity>
           </>
         )}
@@ -278,31 +364,38 @@ export default function App() {
         {/* RESULTS */}
         {phase === 'results' && (
           <>
-            <Text style={styles.resultsTitle}>Your Score</Text>
+            <Text style={styles.resultsEmoji}>{getPercentileEmoji(percentile)}</Text>
             <Text style={styles.totalScore}>{totalScore.toFixed(1)}</Text>
             <Text style={styles.totalScoreLabel}>out of 50</Text>
             
             <View style={styles.percentileBadge}>
-              <Text style={styles.percentileText}>Top {getPercentile(totalScore)}%</Text>
+              <Text style={styles.percentileText}>Top {percentile}%</Text>
             </View>
 
-            <View style={styles.resultsGrid}>
+            <GlassCard style={styles.resultsCard}>
               {targetColors.map((target, i) => (
                 <View key={i} style={styles.resultRow}>
-                  <View style={[styles.resultColor, { backgroundColor: hsbToHex(target.h, target.s, target.b) }]} />
+                  <ColorSwatch color={target} size={36} />
                   <Text style={styles.resultArrow}>→</Text>
-                  <View style={[styles.resultColor, { backgroundColor: hsbToHex(guessColors[i]?.h || 0, guessColors[i]?.s || 0, guessColors[i]?.b || 0) }]} />
+                  <ColorSwatch color={guessColors[i] || { h: 0, s: 0, b: 0 }} size={36} />
                   <Text style={styles.resultScore}>{scores[i]?.toFixed(1)}</Text>
                 </View>
               ))}
-            </View>
+            </GlassCard>
 
             <TouchableOpacity style={styles.shareButton} onPress={shareResults}>
-              <Text style={styles.shareButtonText}>📤 Share</Text>
+              <Text style={styles.shareButtonText}>📤 Share Results</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.playButton} onPress={startGame}>
-              <Text style={styles.playButtonText}>Play Again</Text>
+            <TouchableOpacity onPress={startGame} activeOpacity={0.8}>
+              <LinearGradient
+                colors={['#2997ff', '#af52de']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={styles.primaryButton}
+              >
+                <Text style={styles.primaryButtonText}>Play Again</Text>
+              </LinearGradient>
             </TouchableOpacity>
           </>
         )}
@@ -320,6 +413,35 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#0a0a1a',
   },
+  orb: {
+    position: 'absolute',
+    borderRadius: 999,
+    opacity: 0.3,
+  },
+  orb1: {
+    width: 200,
+    height: 200,
+    backgroundColor: '#2997ff',
+    top: -50,
+    right: -50,
+    filter: 'blur(60px)',
+  },
+  orb2: {
+    width: 150,
+    height: 150,
+    backgroundColor: '#af52de',
+    bottom: 100,
+    left: -30,
+    filter: 'blur(50px)',
+  },
+  orb3: {
+    width: 100,
+    height: 100,
+    backgroundColor: '#00d4aa',
+    top: '40%',
+    right: -20,
+    filter: 'blur(40px)',
+  },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -336,9 +458,9 @@ const styles = StyleSheet.create({
   logoAccent: {
     color: '#2997ff',
   },
-  backButton: {
+  closeBtn: {
     fontSize: 24,
-    color: 'rgba(255,255,255,0.6)',
+    color: 'rgba(255,255,255,0.5)',
     padding: 8,
   },
   content: {
@@ -346,61 +468,96 @@ const styles = StyleSheet.create({
   },
   contentContainer: {
     paddingHorizontal: 24,
-    paddingBottom: 40,
+    paddingBottom: 50,
   },
   tagline: {
-    fontSize: 32,
+    fontSize: 34,
     fontWeight: '800',
     color: '#fff',
     textAlign: 'center',
-    marginVertical: 24,
-    lineHeight: 40,
+    marginVertical: 30,
+    lineHeight: 42,
   },
-  card: {
+  glassCard: {
     backgroundColor: 'rgba(255,255,255,0.05)',
-    borderRadius: 20,
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
     padding: 20,
-    marginBottom: 24,
+    marginBottom: 20,
   },
-  cardText: {
+  infoCard: {
+    alignItems: 'center',
+  },
+  infoText: {
     fontSize: 16,
     color: 'rgba(255,255,255,0.7)',
     textAlign: 'center',
     lineHeight: 24,
   },
-  playButton: {
-    backgroundColor: '#2997ff',
+  primaryButton: {
     borderRadius: 100,
     paddingVertical: 18,
     alignItems: 'center',
-    marginTop: 16,
+    marginTop: 10,
   },
-  playButtonText: {
+  primaryButtonText: {
     fontSize: 18,
     fontWeight: '700',
     color: '#fff',
   },
-  phaseTitle: {
-    fontSize: 20,
-    fontWeight: '600',
-    color: 'rgba(255,255,255,0.8)',
-    textAlign: 'center',
-    marginBottom: 8,
+  progressRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 8,
     marginTop: 20,
+    marginBottom: 10,
+  },
+  progressDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+  },
+  progressDotDone: {
+    backgroundColor: '#00d4aa',
+  },
+  progressDotActive: {
+    backgroundColor: '#2997ff',
+    width: 24,
+  },
+  phaseTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: 'rgba(255,255,255,0.7)',
+    textAlign: 'center',
+    marginBottom: 10,
   },
   timer: {
-    fontSize: 80,
+    fontSize: 72,
     fontWeight: '800',
     color: '#2997ff',
     textAlign: 'center',
-    marginBottom: 24,
   },
-  colorDisplay: {
-    width: width - 80,
-    height: width - 80,
+  colorDisplayContainer: {
+    alignItems: 'center',
+    marginVertical: 30,
+  },
+  swatch: {
     borderRadius: 24,
-    alignSelf: 'center',
-    marginVertical: 20,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.3,
+    shadowRadius: 20,
+    elevation: 10,
+  },
+  swatchShine: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: '50%',
   },
   hint: {
     fontSize: 14,
@@ -414,23 +571,12 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     color: 'rgba(255,255,255,0.6)',
-    marginBottom: 8,
+    marginBottom: 10,
   },
-  sliderTrack: {
-    height: 8,
-    backgroundColor: 'rgba(255,255,255,0.1)',
-    borderRadius: 4,
-    marginBottom: 8,
-  },
-  sliderFill: {
-    height: '100%',
-    borderRadius: 4,
-  },
-  sliderButtons: {
+  sliderRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: 20,
+    gap: 12,
   },
   sliderBtn: {
     width: 44,
@@ -443,19 +589,42 @@ const styles = StyleSheet.create({
   sliderBtnText: {
     fontSize: 24,
     color: '#fff',
-    fontWeight: '600',
+    fontWeight: '300',
+  },
+  sliderTrackContainer: {
+    flex: 1,
+    height: 32,
+    borderRadius: 16,
+    overflow: 'hidden',
+    position: 'relative',
+  },
+  sliderTrack: {
+    flex: 1,
+    borderRadius: 16,
+  },
+  sliderThumb: {
+    position: 'absolute',
+    top: 4,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#fff',
+    marginLeft: -12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 4,
   },
   sliderValue: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#fff',
-    width: 50,
-    textAlign: 'center',
-  },
-  resultsTitle: {
-    fontSize: 18,
+    fontSize: 14,
     fontWeight: '600',
-    color: 'rgba(255,255,255,0.6)',
+    color: 'rgba(255,255,255,0.5)',
+    textAlign: 'center',
+    marginTop: 8,
+  },
+  resultsEmoji: {
+    fontSize: 64,
     textAlign: 'center',
     marginTop: 20,
   },
@@ -469,48 +638,43 @@ const styles = StyleSheet.create({
     fontSize: 18,
     color: 'rgba(255,255,255,0.4)',
     textAlign: 'center',
-    marginBottom: 16,
   },
   percentileBadge: {
-    backgroundColor: 'rgba(41, 151, 255, 0.2)',
+    backgroundColor: 'rgba(41, 151, 255, 0.15)',
     borderRadius: 100,
     paddingVertical: 10,
-    paddingHorizontal: 20,
+    paddingHorizontal: 24,
     alignSelf: 'center',
-    marginBottom: 24,
+    marginVertical: 16,
   },
   percentileText: {
     fontSize: 16,
     fontWeight: '600',
     color: '#2997ff',
   },
-  resultsGrid: {
-    marginBottom: 24,
+  resultsCard: {
+    marginBottom: 20,
   },
   resultRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 12,
+    paddingVertical: 10,
     gap: 12,
   },
-  resultColor: {
-    width: 40,
-    height: 40,
-    borderRadius: 10,
-  },
   resultArrow: {
-    fontSize: 16,
+    fontSize: 18,
     color: 'rgba(255,255,255,0.3)',
   },
   resultScore: {
     fontSize: 18,
     fontWeight: '700',
     color: '#2997ff',
-    width: 50,
+    width: 45,
+    textAlign: 'right',
   },
   shareButton: {
-    backgroundColor: 'rgba(255,255,255,0.1)',
+    backgroundColor: 'rgba(255,255,255,0.08)',
     borderRadius: 100,
     paddingVertical: 16,
     alignItems: 'center',
