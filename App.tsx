@@ -13,9 +13,8 @@ import {
   PanResponder,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { BlurView } from 'expo-blur';
-// Supabase disabled until multiplayer is configured
-// import { createClient } from '@supabase/supabase-js';
+// BlurView disabled - can cause crashes in production
+// import { BlurView } from 'expo-blur';
 
 const { width, height } = Dimensions.get('window');
 
@@ -141,7 +140,7 @@ const calculateScore = (original: HSBColor, guess: HSBColor): number => {
 
 const GlassCard: React.FC<{ children: React.ReactNode; style?: any }> = ({ children, style }) => (
   <View style={[styles.glassCard, style]}>
-    <BlurView intensity={20} tint="dark" style={StyleSheet.absoluteFill} />
+    <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(255,255,255,0.05)' }]} />
     <View style={styles.glassCardInner}>{children}</View>
   </View>
 );
