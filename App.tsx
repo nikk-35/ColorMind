@@ -14,17 +14,18 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
-import { createClient } from '@supabase/supabase-js';
+// Supabase disabled until multiplayer is configured
+// import { createClient } from '@supabase/supabase-js';
 
 const { width, height } = Dimensions.get('window');
 
 // ============================================================================
-// SUPABASE CONFIG (Replace with your own!)
+// SUPABASE CONFIG (Disabled - enable when multiplayer is ready)
 // ============================================================================
 
-const SUPABASE_URL = 'https://your-project.supabase.co';
-const SUPABASE_ANON_KEY = 'your-anon-key';
-const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+// const SUPABASE_URL = 'https://your-project.supabase.co';
+// const SUPABASE_ANON_KEY = 'your-anon-key';
+// const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 // ============================================================================
 // TYPES
