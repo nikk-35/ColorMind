@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   StyleSheet,
   View,
@@ -8,7 +8,7 @@ import {
   StatusBar,
   ScrollView,
   Share,
-  Pressable,
+  GestureResponderEvent,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 
@@ -143,63 +143,74 @@ const ColorSwatch: React.FC<{ color: HSBColor; size?: number; glow?: boolean }> 
 };
 
 // ============================================================================
-// HSB PICKER WITH TOUCH TRACK
+// DRAGGABLE SLIDER COMPONENT
+// ============================================================================
+
+const DraggableSlider: React.FC<{
+  label: string;
+  value: number;
+  max: number;
+  colors: string[];
+  onChange: (value: number) => void;
+}> = ({ label, value, max, colors, onChange }) => {
+  const trackRef = useRef<View>(null);
+  const trackWidth = width - 140;
+  const step = max === 360 ? 15 : 5;
+  
+  const handleTouch = (event: GestureResponderEvent) => {
+    const { locationX } = event.nativeEvent;
+    const newValue = Math.round((Math.max(0, Math.min(trackWidth, locationX)) / trackWidth) * max);
+    onChange(Math.max(0, Math.min(max, newValue)));
+  };
+
+  return (
+    <View style={styles.sliderContainer}>
+      <Text style={styles.sliderLabel}>{label}</Text>
+      <View style={styles.sliderRow}>
+        <TouchableOpacity 
+          style={styles.sliderBtn} 
+          onPress={() => onChange(Math.max(0, value - step))}
+        >
+          <Text style={styles.sliderBtnText}>−</Text>
+        </TouchableOpacity>
+        
+        <View 
+          ref={trackRef}
+          style={styles.sliderTrackWrapper}
+          onStartShouldSetResponder={() => true}
+          onMoveShouldSetResponder={() => true}
+          onResponderGrant={handleTouch}
+          onResponderMove={handleTouch}
+        >
+          <LinearGradient
+            colors={colors as any}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
+            style={styles.sliderTrack}
+          />
+          <View style={[styles.sliderThumb, { left: `${(value / max) * 100}%` }]} />
+        </View>
+        
+        <TouchableOpacity 
+          style={styles.sliderBtn} 
+          onPress={() => onChange(Math.min(max, value + step))}
+        >
+          <Text style={styles.sliderBtnText}>+</Text>
+        </TouchableOpacity>
+      </View>
+      <Text style={styles.sliderValue}>{value}{max === 360 ? '°' : '%'}</Text>
+    </View>
+  );
+};
+
+// ============================================================================
+// HSB PICKER
 // ============================================================================
 
 const HSBPicker: React.FC<{
   value: HSBColor;
   onChange: (color: HSBColor) => void;
 }> = ({ value, onChange }) => {
-  
-  const createSlider = (
-    label: string,
-    currentValue: number,
-    max: number,
-    key: 'h' | 's' | 'b',
-    gradient: string[]
-  ) => {
-    const step = key === 'h' ? 15 : 5;
-    
-    const handlePress = (event: any) => {
-      const { locationX } = event.nativeEvent;
-      const trackWidth = width - 140;
-      const newValue = Math.round((locationX / trackWidth) * max);
-      onChange({ ...value, [key]: Math.max(0, Math.min(max, newValue)) });
-    };
-
-    return (
-      <View style={styles.sliderContainer}>
-        <Text style={styles.sliderLabel}>{label}</Text>
-        <View style={styles.sliderRow}>
-          <TouchableOpacity 
-            style={styles.sliderBtn} 
-            onPress={() => onChange({ ...value, [key]: Math.max(0, currentValue - step) })}
-          >
-            <Text style={styles.sliderBtnText}>−</Text>
-          </TouchableOpacity>
-          
-          <Pressable style={styles.sliderTrackWrapper} onPress={handlePress}>
-            <LinearGradient
-              colors={gradient as any}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 0 }}
-              style={styles.sliderTrack}
-            />
-            <View style={[styles.sliderThumb, { left: `${(currentValue / max) * 100}%` }]} />
-          </Pressable>
-          
-          <TouchableOpacity 
-            style={styles.sliderBtn} 
-            onPress={() => onChange({ ...value, [key]: Math.min(max, currentValue + step) })}
-          >
-            <Text style={styles.sliderBtnText}>+</Text>
-          </TouchableOpacity>
-        </View>
-        <Text style={styles.sliderValue}>{currentValue}°</Text>
-      </View>
-    );
-  };
-
   const hueGradient = Array.from({ length: 7 }, (_, i) => hsbToHex(i * 60, 100, 100));
   const satGradient = [hsbToHex(value.h, 0, value.b), hsbToHex(value.h, 100, value.b)];
   const briGradient = [hsbToHex(value.h, value.s, 0), hsbToHex(value.h, value.s, 100)];
@@ -219,9 +230,27 @@ const HSBPicker: React.FC<{
           />
         </View>
       </View>
-      {createSlider('Hue', value.h, 360, 'h', hueGradient)}
-      {createSlider('Saturation', value.s, 100, 's', satGradient)}
-      {createSlider('Brightness', value.b, 100, 'b', briGradient)}
+      <DraggableSlider
+        label="HUE"
+        value={value.h}
+        max={360}
+        colors={hueGradient}
+        onChange={(v) => onChange({ ...value, h: v })}
+      />
+      <DraggableSlider
+        label="SATURATION"
+        value={value.s}
+        max={100}
+        colors={satGradient}
+        onChange={(v) => onChange({ ...value, s: v })}
+      />
+      <DraggableSlider
+        label="BRIGHTNESS"
+        value={value.b}
+        max={100}
+        colors={briGradient}
+        onChange={(v) => onChange({ ...value, b: v })}
+      />
     </GlassCard>
   );
 };
