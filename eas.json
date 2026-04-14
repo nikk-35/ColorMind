@@ -25,13 +25,7 @@
   "submit": {
     "production": {
       "ios": {
-        "appleId": "DEINE_APPLE_ID@email.com",
-        "ascAppId": "WIRD_AUTOMATISCH_GEFÜLLT",
-        "appleTeamId": "DEIN_TEAM_ID"
-      },
-      "android": {
-        "serviceAccountKeyPath": "./google-service-account.json",
-        "track": "production"
+        "appleTeamId": "HKT97F39LM"
       }
     }
   }

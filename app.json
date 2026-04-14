@@ -31,9 +31,7 @@
     },
     "plugins": [],
     "extra": {
-      "eas": {
-        "projectId": "WIRD_AUTOMATISCH_GEFÜLLT"
-      }
+      "eas": {}
     }
   }
 }
