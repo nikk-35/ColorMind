@@ -40,7 +40,6 @@ const hsbToHex = (h: number, s: number, b: number): string => {
   return `#${toHex(f(5))}${toHex(f(3))}${toHex(f(1))}`;
 };
 
-// Seeded random number generator
 const seededRandom = (seed: number): (() => number) => {
   let state = seed;
   return () => {
@@ -61,8 +60,7 @@ const generateColorsWithSeed = (count: number, seed: number): HSBColor[] => {
 };
 
 const generateColors = (count: number): HSBColor[] => {
-  const random = () => Math.random();
-  return Array.from({ length: count }, () => randomColor(random));
+  return Array.from({ length: count }, () => randomColor(Math.random));
 };
 
 const getDailySeed = (): number => {
@@ -107,100 +105,21 @@ const getEmoji = (p: number): string => {
 };
 
 // ============================================================================
-// RAINBOW BAR (Pure React Native - no LinearGradient!)
+// SIMPLE BUTTON SLIDER (NO TOUCH GESTURES - JUST BUTTONS!)
 // ============================================================================
 
-const RainbowBar: React.FC = () => {
-  const colors = [
-    '#ff0000', '#ff4000', '#ff8000', '#ffbf00', '#ffff00',
-    '#80ff00', '#00ff00', '#00ff80', '#00ffff', '#0080ff',
-    '#0000ff', '#8000ff', '#ff00ff', '#ff0080',
-  ];
-  
-  return (
-    <View style={styles.rainbowBar}>
-      {colors.map((color, i) => (
-        <View key={i} style={[styles.rainbowSegment, { backgroundColor: color }]} />
-      ))}
-    </View>
-  );
-};
-
-// ============================================================================
-// GRADIENT BAR (Simulated with segments)
-// ============================================================================
-
-const GradientBar: React.FC<{ startColor: string; endColor: string }> = ({ startColor, endColor }) => {
-  // Parse hex to RGB
-  const parseHex = (hex: string) => {
-    const h = hex.replace('#', '');
-    return {
-      r: parseInt(h.substring(0, 2), 16),
-      g: parseInt(h.substring(2, 4), 16),
-      b: parseInt(h.substring(4, 6), 16),
-    };
-  };
-  
-  const start = parseHex(startColor);
-  const end = parseHex(endColor);
-  const segments = 12;
-  
-  const colors = Array.from({ length: segments }, (_, i) => {
-    const t = i / (segments - 1);
-    const r = Math.round(start.r + (end.r - start.r) * t);
-    const g = Math.round(start.g + (end.g - start.g) * t);
-    const b = Math.round(start.b + (end.b - start.b) * t);
-    return `rgb(${r},${g},${b})`;
-  });
-  
-  return (
-    <View style={styles.rainbowBar}>
-      {colors.map((color, i) => (
-        <View key={i} style={[styles.rainbowSegment, { backgroundColor: color }]} />
-      ))}
-    </View>
-  );
-};
-
-// ============================================================================
-// SLIDER
-// ============================================================================
-
-interface SliderProps {
+interface SimpleSliderProps {
   label: string;
   value: number;
   max: number;
-  type: 'hue' | 'saturation' | 'brightness';
-  hue?: number;
-  saturation?: number;
-  brightness?: number;
+  colors: string[];
   onChange: (value: number) => void;
 }
 
-const Slider: React.FC<SliderProps> = ({ 
-  label, value, max, type, hue = 0, saturation = 100, brightness = 100, onChange 
-}) => {
-  const step = max === 360 ? 15 : 5;
-  const percentage = (value / max) * 100;
+const SimpleSlider: React.FC<SimpleSliderProps> = ({ label, value, max, colors, onChange }) => {
+  const step = max === 360 ? 30 : 10;
+  const fineStep = max === 360 ? 10 : 5;
   
-  const handleTrackPress = (e: any) => {
-    const x = e.nativeEvent.locationX;
-    const trackWidth = width - 140;
-    const newVal = Math.round((x / trackWidth) * max);
-    onChange(Math.max(0, Math.min(max, newVal)));
-  };
-
-  // Generate gradient colors for saturation/brightness
-  const getSatGradient = () => ({
-    start: hsbToHex(hue, 0, brightness),
-    end: hsbToHex(hue, 100, brightness),
-  });
-  
-  const getBriGradient = () => ({
-    start: hsbToHex(hue, saturation, 0),
-    end: hsbToHex(hue, saturation, 100),
-  });
-
   return (
     <View style={styles.sliderContainer}>
       <View style={styles.sliderHeader}>
@@ -208,35 +127,47 @@ const Slider: React.FC<SliderProps> = ({
         <Text style={styles.sliderValue}>{value}{max === 360 ? '°' : '%'}</Text>
       </View>
       
-      <View style={styles.sliderRow}>
+      {/* Color preview bar */}
+      <View style={styles.colorBar}>
+        {colors.map((color, i) => (
+          <View key={i} style={[styles.colorSegment, { backgroundColor: color }]} />
+        ))}
+        {/* Indicator */}
+        <View style={[styles.indicator, { left: `${(value / max) * 100}%` }]} />
+      </View>
+      
+      {/* Control buttons */}
+      <View style={styles.buttonRow}>
         <TouchableOpacity 
-          style={styles.sliderBtn} 
+          style={styles.stepBtn} 
           onPress={() => onChange(Math.max(0, value - step))}
         >
-          <Text style={styles.sliderBtnText}>−</Text>
+          <Text style={styles.stepBtnText}>−−</Text>
         </TouchableOpacity>
         
-        <View 
-          style={styles.sliderTrackContainer}
-          onStartShouldSetResponder={() => true}
-          onMoveShouldSetResponder={() => true}
-          onResponderGrant={handleTrackPress}
-          onResponderMove={handleTrackPress}
+        <TouchableOpacity 
+          style={styles.stepBtn} 
+          onPress={() => onChange(Math.max(0, value - fineStep))}
         >
-          {type === 'hue' && <RainbowBar />}
-          {type === 'saturation' && <GradientBar {...getSatGradient()} />}
-          {type === 'brightness' && <GradientBar {...getBriGradient()} />}
-          
-          <View style={[styles.sliderThumb, { left: `${percentage}%` }]}>
-            <View style={styles.sliderThumbInner} />
-          </View>
+          <Text style={styles.stepBtnText}>−</Text>
+        </TouchableOpacity>
+        
+        <View style={styles.valueDisplay}>
+          <Text style={styles.valueText}>{value}</Text>
         </View>
         
         <TouchableOpacity 
-          style={styles.sliderBtn} 
+          style={styles.stepBtn} 
+          onPress={() => onChange(Math.min(max, value + fineStep))}
+        >
+          <Text style={styles.stepBtnText}>+</Text>
+        </TouchableOpacity>
+        
+        <TouchableOpacity 
+          style={styles.stepBtn} 
           onPress={() => onChange(Math.min(max, value + step))}
         >
-          <Text style={styles.sliderBtnText}>+</Text>
+          <Text style={styles.stepBtnText}>++</Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -251,38 +182,58 @@ const ColorPicker: React.FC<{
   value: HSBColor;
   onChange: (color: HSBColor) => void;
 }> = ({ value, onChange }) => {
+  // Rainbow colors for hue
+  const hueColors = [
+    '#ff0000', '#ff8000', '#ffff00', '#00ff00', 
+    '#00ffff', '#0000ff', '#ff00ff', '#ff0000'
+  ];
+  
+  // Saturation gradient
+  const satColors = [
+    hsbToHex(value.h, 0, value.b),
+    hsbToHex(value.h, 50, value.b),
+    hsbToHex(value.h, 100, value.b),
+  ];
+  
+  // Brightness gradient
+  const briColors = [
+    hsbToHex(value.h, value.s, 0),
+    hsbToHex(value.h, value.s, 50),
+    hsbToHex(value.h, value.s, 100),
+  ];
+
   return (
     <View style={styles.pickerContainer}>
+      {/* Color Preview */}
       <View style={styles.previewContainer}>
         <View 
           style={[styles.colorPreview, { backgroundColor: hsbToHex(value.h, value.s, value.b) }]}
         />
       </View>
 
+      {/* Sliders */}
       <View style={styles.slidersCard}>
-        <Slider
+        <SimpleSlider
           label="Farbton"
           value={value.h}
           max={360}
-          type="hue"
+          colors={hueColors}
           onChange={(h) => onChange({ ...value, h })}
         />
-        <Slider
+        
+        <SimpleSlider
           label="Sättigung"
           value={value.s}
           max={100}
-          type="saturation"
-          hue={value.h}
-          brightness={value.b}
+          colors={satColors}
           onChange={(s) => onChange({ ...value, s })}
         />
-        <Slider
+        
+        <SimpleSlider
           label="Helligkeit"
           value={value.b}
           max={100}
-          type="brightness"
-          hue={value.h}
-          saturation={value.s}
+          colors={briColors}
           onChange={(b) => onChange({ ...value, b })}
         />
       </View>
@@ -378,10 +329,8 @@ export default function App() {
     startGame('multiplayer', seed);
   }, [roomCode, startGame]);
 
-  const copyCode = useCallback(async () => {
-    try {
-      Alert.alert('Code', `Dein Code: ${roomCode}\n\nTeile ihn mit deinen Freunden!`);
-    } catch {}
+  const copyCode = useCallback(() => {
+    Alert.alert('Code', `Dein Code: ${roomCode}\n\nTeile ihn mit deinen Freunden!`);
   }, [roomCode]);
 
   useEffect(() => {
@@ -543,8 +492,8 @@ export default function App() {
               <Text style={styles.copyButtonText}>📋 Code anzeigen</Text>
             </TouchableOpacity>
             
-            <TouchableOpacity style={styles.startButton} onPress={startMultiplayerGame}>
-              <Text style={styles.startButtonText}>🎮 Spiel starten</Text>
+            <TouchableOpacity style={styles.primaryButton} onPress={startMultiplayerGame}>
+              <Text style={styles.primaryButtonText}>🎮 Spiel starten</Text>
             </TouchableOpacity>
           </View>
         )}
@@ -571,21 +520,21 @@ export default function App() {
             </Text>
             
             <TouchableOpacity 
-              style={[styles.startButton, inputCode.length !== 4 && styles.disabledButton]} 
+              style={[styles.primaryButton, inputCode.length !== 4 && styles.disabledButton]} 
               onPress={joinRoom}
               disabled={inputCode.length !== 4}
             >
-              <Text style={styles.startButtonText}>🎮 Beitreten & Spielen</Text>
+              <Text style={styles.primaryButtonText}>🎮 Beitreten</Text>
             </TouchableOpacity>
           </View>
         )}
 
         {/* MEMORIZE */}
-        {phase === 'memorize' && targets[idx] && (
+        {phase === 'memorize' && targets.length > 0 && targets[idx] && (
           <View style={styles.gameContainer}>
             {mode === 'multiplayer' && (
-              <View style={styles.roomBadge}>
-                <Text style={styles.roomBadgeText}>Code: {roomCode}</Text>
+              <View style={styles.badge}>
+                <Text style={styles.badgeText}>Code: {roomCode}</Text>
               </View>
             )}
             
@@ -605,14 +554,12 @@ export default function App() {
             <Text style={styles.phaseTitle}>Farbe {idx + 1} merken</Text>
             <Text style={styles.timer}>{timer}</Text>
             
-            <View style={styles.memorizeColorContainer}>
-              <View 
-                style={[
-                  styles.memorizeColor, 
-                  { backgroundColor: hsbToHex(targets[idx].h, targets[idx].s, targets[idx].b) }
-                ]}
-              />
-            </View>
+            <View 
+              style={[
+                styles.memorizeColor, 
+                { backgroundColor: hsbToHex(targets[idx].h, targets[idx].s, targets[idx].b) }
+              ]}
+            />
             
             <Text style={styles.hint}>Präge dir diese Farbe ein!</Text>
           </View>
@@ -622,8 +569,8 @@ export default function App() {
         {phase === 'recall' && (
           <View style={styles.gameContainer}>
             {mode === 'multiplayer' && (
-              <View style={styles.roomBadge}>
-                <Text style={styles.roomBadgeText}>Code: {roomCode}</Text>
+              <View style={styles.badge}>
+                <Text style={styles.badgeText}>Code: {roomCode}</Text>
               </View>
             )}
             
@@ -644,8 +591,8 @@ export default function App() {
             
             <ColorPicker value={guess} onChange={setGuess} />
 
-            <TouchableOpacity style={styles.submitButton} onPress={submitGuess}>
-              <Text style={styles.submitButtonText}>
+            <TouchableOpacity style={styles.primaryButton} onPress={submitGuess}>
+              <Text style={styles.primaryButtonText}>
                 {idx < N - 1 ? 'Weiter →' : 'Ergebnis'}
               </Text>
             </TouchableOpacity>
@@ -656,13 +603,13 @@ export default function App() {
         {phase === 'results' && (
           <View style={styles.resultsContainer}>
             {mode === 'multiplayer' && (
-              <View style={styles.roomBadge}>
-                <Text style={styles.roomBadgeText}>Duell • Code: {roomCode}</Text>
+              <View style={styles.badge}>
+                <Text style={styles.badgeText}>Duell • Code: {roomCode}</Text>
               </View>
             )}
             {mode === 'daily' && (
-              <View style={styles.roomBadge}>
-                <Text style={styles.roomBadgeText}>📅 Daily Challenge</Text>
+              <View style={styles.badge}>
+                <Text style={styles.badgeText}>📅 Daily Challenge</Text>
               </View>
             )}
             
@@ -689,14 +636,12 @@ export default function App() {
               ))}
             </View>
 
-            <TouchableOpacity style={styles.shareButton} onPress={shareResults}>
-              <Text style={styles.shareButtonText}>
-                {mode === 'multiplayer' ? '📤 Score an Freund senden' : '📤 Teilen'}
-              </Text>
+            <TouchableOpacity style={styles.secondaryButton} onPress={shareResults}>
+              <Text style={styles.secondaryButtonText}>📤 Teilen</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.submitButton} onPress={goToMenu}>
-              <Text style={styles.submitButtonText}>Zurück zum Menü</Text>
+            <TouchableOpacity style={styles.primaryButton} onPress={goToMenu}>
+              <Text style={styles.primaryButtonText}>Zurück zum Menü</Text>
             </TouchableOpacity>
           </View>
         )}
@@ -729,25 +674,24 @@ const styles = StyleSheet.create({
   // Menu
   menuContainer: { alignItems: 'center', paddingTop: 30 },
   menuTitle: {
-    fontSize: 32,
+    fontSize: 28,
     fontWeight: '800',
     color: '#fff',
     textAlign: 'center',
-    lineHeight: 40,
+    lineHeight: 36,
   },
   menuSubtitle: {
     fontSize: 15,
     color: 'rgba(255,255,255,0.5)',
     textAlign: 'center',
     marginTop: 8,
-    marginBottom: 20,
   },
   modesContainer: { width: '100%', marginTop: 30, gap: 12 },
   modeButton: {
     flexDirection: 'row',
     alignItems: 'center',
     padding: 20,
-    borderRadius: 20,
+    borderRadius: 16,
   },
   modeIcon: { fontSize: 28, marginRight: 16 },
   modeText: { flex: 1 },
@@ -759,33 +703,24 @@ const styles = StyleSheet.create({
   roomContainer: { alignItems: 'center', paddingTop: 40 },
   roomTitle: { fontSize: 24, fontWeight: '800', color: '#fff', marginBottom: 24 },
   codeDisplay: {
-    backgroundColor: 'rgba(255,255,255,0.1)',
-    borderRadius: 20,
-    paddingVertical: 24,
-    paddingHorizontal: 48,
-    borderWidth: 2,
-    borderColor: '#2997ff',
-    marginBottom: 16,
-  },
-  codeText: {
-    fontSize: 48,
-    fontWeight: '800',
-    color: '#2997ff',
-    letterSpacing: 12,
-  },
-  codeInput: {
-    backgroundColor: 'rgba(255,255,255,0.1)',
-    borderRadius: 20,
+    backgroundColor: 'rgba(41,151,255,0.2)',
+    borderRadius: 16,
     paddingVertical: 20,
     paddingHorizontal: 40,
-    fontSize: 40,
+    marginBottom: 16,
+  },
+  codeText: { fontSize: 40, fontWeight: '800', color: '#2997ff', letterSpacing: 8 },
+  codeInput: {
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    borderRadius: 16,
+    paddingVertical: 16,
+    paddingHorizontal: 32,
+    fontSize: 32,
     fontWeight: '800',
     color: '#fff',
-    letterSpacing: 12,
+    letterSpacing: 8,
     marginBottom: 16,
-    minWidth: 200,
-    borderWidth: 2,
-    borderColor: 'rgba(255,255,255,0.2)',
+    minWidth: 180,
   },
   roomHint: {
     fontSize: 14,
@@ -796,32 +731,48 @@ const styles = StyleSheet.create({
   },
   copyButton: {
     backgroundColor: 'rgba(255,255,255,0.1)',
-    paddingVertical: 14,
+    paddingVertical: 12,
     paddingHorizontal: 24,
-    borderRadius: 30,
-    marginBottom: 16,
+    borderRadius: 24,
+    marginBottom: 12,
   },
   copyButtonText: { fontSize: 16, fontWeight: '600', color: '#fff' },
-  startButton: {
+
+  // Buttons
+  primaryButton: {
     backgroundColor: '#2997ff',
-    paddingVertical: 18,
-    paddingHorizontal: 40,
-    borderRadius: 30,
+    paddingVertical: 16,
+    paddingHorizontal: 32,
+    borderRadius: 24,
     marginTop: 8,
+    minWidth: 200,
+    alignItems: 'center',
   },
-  startButtonText: { fontSize: 18, fontWeight: '700', color: '#fff' },
-  roomBadge: {
+  primaryButtonText: { fontSize: 17, fontWeight: '700', color: '#fff' },
+  secondaryButton: {
     backgroundColor: 'rgba(255,255,255,0.1)',
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    borderRadius: 20,
-    marginBottom: 16,
+    paddingVertical: 14,
+    paddingHorizontal: 24,
+    borderRadius: 24,
+    marginBottom: 8,
+    width: '100%',
+    alignItems: 'center',
   },
-  roomBadgeText: { fontSize: 13, fontWeight: '600', color: 'rgba(255,255,255,0.7)' },
+  secondaryButtonText: { fontSize: 16, fontWeight: '600', color: '#fff' },
+
+  // Badge
+  badge: {
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    paddingVertical: 6,
+    paddingHorizontal: 14,
+    borderRadius: 16,
+    marginBottom: 12,
+  },
+  badgeText: { fontSize: 13, fontWeight: '600', color: 'rgba(255,255,255,0.7)' },
 
   // Game
   gameContainer: { alignItems: 'center', paddingTop: 10 },
-  progressRow: { flexDirection: 'row', gap: 8, marginBottom: 16 },
+  progressRow: { flexDirection: 'row', gap: 8, marginBottom: 12 },
   progressDot: {
     width: 10,
     height: 10,
@@ -829,131 +780,127 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.2)',
   },
   progressDotDone: { backgroundColor: '#00d4aa' },
-  progressDotActive: { backgroundColor: '#2997ff', width: 24 },
+  progressDotActive: { backgroundColor: '#2997ff', width: 20 },
   phaseTitle: { fontSize: 16, color: 'rgba(255,255,255,0.6)', marginBottom: 8 },
-  timer: { fontSize: 80, fontWeight: '800', color: '#2997ff' },
-  memorizeColorContainer: { marginVertical: 30 },
+  timer: { fontSize: 72, fontWeight: '800', color: '#2997ff' },
   memorizeColor: {
-    width: width * 0.55,
-    height: width * 0.55,
-    borderRadius: 30,
+    width: width * 0.5,
+    height: width * 0.5,
+    borderRadius: 24,
+    marginVertical: 24,
   },
   hint: { fontSize: 14, color: 'rgba(255,255,255,0.4)' },
 
   // Color Picker
-  pickerContainer: { width: '100%', marginVertical: 16 },
-  previewContainer: { alignItems: 'center', marginBottom: 20 },
-  colorPreview: { width: 100, height: 100, borderRadius: 24 },
+  pickerContainer: { width: '100%', marginVertical: 12 },
+  previewContainer: { alignItems: 'center', marginBottom: 16 },
+  colorPreview: { width: 80, height: 80, borderRadius: 20 },
   slidersCard: {
-    backgroundColor: 'rgba(255,255,255,0.05)',
-    borderRadius: 24,
-    padding: 20,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
-  },
-  sliderContainer: { marginBottom: 20 },
-  sliderHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 10 },
-  sliderLabel: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: 'rgba(255,255,255,0.5)',
-    textTransform: 'uppercase',
-    letterSpacing: 1,
-  },
-  sliderValue: { fontSize: 13, fontWeight: '600', color: 'rgba(255,255,255,0.7)' },
-  sliderRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  sliderBtn: {
-    width: 36,
-    height: 36,
-    backgroundColor: 'rgba(255,255,255,0.1)',
-    borderRadius: 18,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  sliderBtnText: { fontSize: 20, color: '#fff', fontWeight: '300' },
-  sliderTrackContainer: {
-    flex: 1,
-    height: 36,
-    borderRadius: 18,
-    overflow: 'hidden',
-    position: 'relative',
-  },
-  rainbowBar: {
-    flex: 1,
-    flexDirection: 'row',
-    height: '100%',
-  },
-  rainbowSegment: {
-    flex: 1,
-    height: '100%',
-  },
-  sliderThumb: {
-    position: 'absolute',
-    top: 4,
-    width: 28,
-    height: 28,
-    marginLeft: -14,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  sliderThumbInner: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: '#fff',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-    elevation: 4,
-  },
-  submitButton: {
-    width: width - 48,
-    backgroundColor: '#2997ff',
-    paddingVertical: 18,
-    borderRadius: 30,
-    alignItems: 'center',
-    marginTop: 16,
-  },
-  submitButtonText: { fontSize: 18, fontWeight: '700', color: '#fff' },
-
-  // Results
-  resultsContainer: { alignItems: 'center', paddingTop: 10 },
-  resultsEmoji: { fontSize: 64 },
-  totalScore: { fontSize: 72, fontWeight: '800', color: '#fff' },
-  totalScoreLabel: { fontSize: 16, color: 'rgba(255,255,255,0.4)' },
-  percentileBadge: { 
-    backgroundColor: 'rgba(41,151,255,0.2)',
-    paddingVertical: 12, 
-    paddingHorizontal: 24, 
-    borderRadius: 30, 
-    marginVertical: 16 
-  },
-  percentileText: { fontSize: 16, fontWeight: '600', color: '#2997ff' },
-  resultsCard: {
-    width: '100%',
     backgroundColor: 'rgba(255,255,255,0.05)',
     borderRadius: 20,
     padding: 16,
-    marginBottom: 16,
+  },
+
+  // Simple Slider
+  sliderContainer: { marginBottom: 16 },
+  sliderHeader: { 
+    flexDirection: 'row', 
+    justifyContent: 'space-between', 
+    marginBottom: 8 
+  },
+  sliderLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: 'rgba(255,255,255,0.5)',
+    textTransform: 'uppercase',
+  },
+  sliderValue: { 
+    fontSize: 12, 
+    fontWeight: '600', 
+    color: 'rgba(255,255,255,0.7)' 
+  },
+  colorBar: {
+    height: 24,
+    borderRadius: 12,
+    flexDirection: 'row',
+    overflow: 'hidden',
+    marginBottom: 10,
+    position: 'relative',
+  },
+  colorSegment: { flex: 1 },
+  indicator: {
+    position: 'absolute',
+    top: 2,
+    width: 20,
+    height: 20,
+    marginLeft: -10,
+    backgroundColor: '#fff',
+    borderRadius: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 3,
+    elevation: 4,
+  },
+  buttonRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  stepBtn: {
+    width: 44,
+    height: 44,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  stepBtnText: { fontSize: 18, color: '#fff', fontWeight: '600' },
+  valueDisplay: {
+    backgroundColor: 'rgba(41,151,255,0.2)',
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    minWidth: 60,
+    alignItems: 'center',
+  },
+  valueText: { fontSize: 16, fontWeight: '700', color: '#2997ff' },
+
+  // Results
+  resultsContainer: { alignItems: 'center', paddingTop: 10 },
+  resultsEmoji: { fontSize: 56 },
+  totalScore: { fontSize: 64, fontWeight: '800', color: '#fff' },
+  totalScoreLabel: { fontSize: 16, color: 'rgba(255,255,255,0.4)' },
+  percentileBadge: { 
+    backgroundColor: 'rgba(41,151,255,0.2)',
+    paddingVertical: 10, 
+    paddingHorizontal: 20, 
+    borderRadius: 20, 
+    marginVertical: 12,
+  },
+  percentileText: { fontSize: 15, fontWeight: '600', color: '#2997ff' },
+  resultsCard: {
+    width: '100%',
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderRadius: 16,
+    padding: 12,
+    marginBottom: 12,
   },
   resultRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 10,
-    gap: 12,
+    paddingVertical: 8,
+    gap: 10,
   },
-  resultColor: { width: 40, height: 40, borderRadius: 12 },
-  resultArrow: { fontSize: 16, color: 'rgba(255,255,255,0.3)' },
-  resultScore: { fontSize: 18, fontWeight: '700', color: '#2997ff', width: 45, textAlign: 'right' },
-  shareButton: {
-    width: '100%',
-    backgroundColor: 'rgba(255,255,255,0.08)',
-    paddingVertical: 16,
-    borderRadius: 30,
-    alignItems: 'center',
-    marginBottom: 8,
+  resultColor: { width: 36, height: 36, borderRadius: 10 },
+  resultArrow: { fontSize: 14, color: 'rgba(255,255,255,0.3)' },
+  resultScore: { 
+    fontSize: 16, 
+    fontWeight: '700', 
+    color: '#2997ff', 
+    width: 40, 
+    textAlign: 'right' 
   },
-  shareButtonText: { fontSize: 16, fontWeight: '600', color: '#fff' },
 });
