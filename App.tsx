@@ -11,11 +11,12 @@ import {
   TextInput,
   Alert,
   PanResponder,
-  Animated,
+  GestureResponderEvent,
 } from 'react-native';
 
 const { width } = Dimensions.get('window');
-const SLIDER_WIDTH = width - 100;
+const SLIDER_PADDING = 50;
+const SLIDER_WIDTH = width - SLIDER_PADDING * 2 - 48;
 
 // ============================================================================
 // TYPES
@@ -108,10 +109,10 @@ const getEmoji = (p: number): string => {
 };
 
 // ============================================================================
-// CUSTOM SLIDER WITH PAN RESPONDER
+// DRAGGABLE SLIDER
 // ============================================================================
 
-interface CustomSliderProps {
+interface SliderProps {
   label: string;
   value: number;
   max: number;
@@ -119,32 +120,37 @@ interface CustomSliderProps {
   onChange: (value: number) => void;
 }
 
-const CustomSlider: React.FC<CustomSliderProps> = ({ label, value, max, colors, onChange }) => {
-  const sliderRef = useRef<View>(null);
-  const position = useRef(new Animated.Value((value / max) * SLIDER_WIDTH)).current;
+const DraggableSlider: React.FC<SliderProps> = ({ label, value, max, colors, onChange }) => {
+  const trackRef = useRef<View>(null);
+  const trackX = useRef(0);
   
-  useEffect(() => {
-    position.setValue((value / max) * SLIDER_WIDTH);
-  }, [value, max]);
+  const handleTouch = useCallback((pageX: number) => {
+    const x = pageX - trackX.current;
+    const percentage = Math.max(0, Math.min(1, x / SLIDER_WIDTH));
+    const newValue = Math.round(percentage * max);
+    onChange(newValue);
+  }, [max, onChange]);
 
   const panResponder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
       onMoveShouldSetPanResponder: () => true,
       onPanResponderGrant: (evt) => {
-        const x = evt.nativeEvent.locationX;
-        const newValue = Math.round((x / SLIDER_WIDTH) * max);
-        onChange(Math.max(0, Math.min(max, newValue)));
+        handleTouch(evt.nativeEvent.pageX);
       },
       onPanResponderMove: (evt) => {
-        const x = evt.nativeEvent.locationX;
-        const newValue = Math.round((x / SLIDER_WIDTH) * max);
-        onChange(Math.max(0, Math.min(max, newValue)));
+        handleTouch(evt.nativeEvent.pageX);
       },
     })
   ).current;
 
-  const thumbPosition = (value / max) * SLIDER_WIDTH;
+  const onLayout = useCallback(() => {
+    trackRef.current?.measureInWindow((x) => {
+      trackX.current = x;
+    });
+  }, []);
+
+  const thumbLeft = (value / max) * SLIDER_WIDTH;
 
   return (
     <View style={styles.sliderContainer}>
@@ -153,22 +159,19 @@ const CustomSlider: React.FC<CustomSliderProps> = ({ label, value, max, colors, 
         <Text style={styles.sliderValue}>{value}{max === 360 ? '°' : '%'}</Text>
       </View>
       
-      <View style={styles.sliderWrapper}>
-        <View 
-          ref={sliderRef}
-          style={styles.sliderTrack}
-          {...panResponder.panHandlers}
-        >
-          {/* Color gradient */}
-          <View style={styles.gradientContainer}>
-            {colors.map((color, i) => (
-              <View key={i} style={[styles.gradientSegment, { backgroundColor: color }]} />
-            ))}
-          </View>
-          
-          {/* Thumb */}
-          <View style={[styles.thumb, { left: thumbPosition - 12 }]} />
+      <View 
+        ref={trackRef}
+        style={styles.sliderTrack}
+        onLayout={onLayout}
+        {...panResponder.panHandlers}
+      >
+        <View style={styles.gradientContainer}>
+          {colors.map((color, i) => (
+            <View key={i} style={[styles.gradientSegment, { backgroundColor: color }]} />
+          ))}
         </View>
+        
+        <View style={[styles.thumb, { left: thumbLeft }]} />
       </View>
     </View>
   );
@@ -178,10 +181,12 @@ const CustomSlider: React.FC<CustomSliderProps> = ({ label, value, max, colors, 
 // COLOR PICKER
 // ============================================================================
 
-const ColorPicker: React.FC<{
+interface ColorPickerProps {
   value: HSBColor;
   onChange: (color: HSBColor) => void;
-}> = ({ value, onChange }) => {
+}
+
+const ColorPicker: React.FC<ColorPickerProps> = ({ value, onChange }) => {
   const hueColors = [
     '#ff0000', '#ff8000', '#ffff00', '#80ff00',
     '#00ff00', '#00ff80', '#00ffff', '#0080ff',
@@ -204,6 +209,18 @@ const ColorPicker: React.FC<{
     hsbToHex(value.h, value.s, 100),
   ];
 
+  const handleHueChange = useCallback((h: number) => {
+    onChange({ ...value, h });
+  }, [value, onChange]);
+
+  const handleSatChange = useCallback((s: number) => {
+    onChange({ ...value, s });
+  }, [value, onChange]);
+
+  const handleBriChange = useCallback((b: number) => {
+    onChange({ ...value, b });
+  }, [value, onChange]);
+
   return (
     <View style={styles.pickerContainer}>
       <View style={styles.previewContainer}>
@@ -213,28 +230,28 @@ const ColorPicker: React.FC<{
       </View>
 
       <View style={styles.slidersCard}>
-        <CustomSlider
+        <DraggableSlider
           label="Farbton"
           value={value.h}
           max={360}
           colors={hueColors}
-          onChange={(h) => onChange({ ...value, h })}
+          onChange={handleHueChange}
         />
         
-        <CustomSlider
+        <DraggableSlider
           label="Sättigung"
           value={value.s}
           max={100}
           colors={satColors}
-          onChange={(s) => onChange({ ...value, s })}
+          onChange={handleSatChange}
         />
         
-        <CustomSlider
+        <DraggableSlider
           label="Helligkeit"
           value={value.b}
           max={100}
           colors={briColors}
-          onChange={(b) => onChange({ ...value, b })}
+          onChange={handleBriChange}
         />
       </View>
     </View>
@@ -343,6 +360,10 @@ export default function App() {
     return () => clearTimeout(t);
   }, [phase, timer]);
 
+  const handleGuessChange = useCallback((newGuess: HSBColor) => {
+    setGuess(newGuess);
+  }, []);
+
   const submitGuess = useCallback(() => {
     const newGuesses = [...guesses, guess];
     setGuesses(newGuesses);
@@ -409,6 +430,7 @@ export default function App() {
         contentContainerStyle={styles.contentInner}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
+        scrollEnabled={phase !== 'recall'}
       >
         {/* MAIN MENU */}
         {phase === 'menu' && (
@@ -589,7 +611,7 @@ export default function App() {
             
             <Text style={styles.phaseTitle}>Farbe {idx + 1} nachbauen</Text>
             
-            <ColorPicker value={guess} onChange={setGuess} />
+            <ColorPicker value={guess} onChange={handleGuessChange} />
 
             <TouchableOpacity style={styles.primaryButton} onPress={submitGuess}>
               <Text style={styles.primaryButtonText}>
@@ -811,19 +833,16 @@ const styles = StyleSheet.create({
     fontWeight: '600', 
     color: 'rgba(255,255,255,0.7)' 
   },
-  sliderWrapper: {
-    paddingHorizontal: 12,
-  },
   sliderTrack: {
-    height: 32,
-    borderRadius: 16,
-    overflow: 'hidden',
+    height: 36,
+    borderRadius: 18,
+    overflow: 'visible',
     position: 'relative',
   },
   gradientContainer: {
     flexDirection: 'row',
-    height: '100%',
-    borderRadius: 16,
+    height: 36,
+    borderRadius: 18,
     overflow: 'hidden',
   },
   gradientSegment: {
@@ -833,10 +852,11 @@ const styles = StyleSheet.create({
   thumb: {
     position: 'absolute',
     top: 4,
-    width: 24,
-    height: 24,
+    width: 28,
+    height: 28,
+    marginLeft: -14,
     backgroundColor: '#fff',
-    borderRadius: 12,
+    borderRadius: 14,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.3,
