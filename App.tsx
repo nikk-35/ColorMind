@@ -9,10 +9,8 @@ import {
   ScrollView,
   Share,
   TextInput,
-  Clipboard,
   Alert,
 } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
 
 const { width } = Dimensions.get('window');
 
@@ -108,37 +106,100 @@ const getEmoji = (p: number): string => {
   return '⭐';
 };
 
-// Rainbow colors for HUE slider
-const HUE_COLORS = [
-  '#ff0000', '#ff8000', '#ffff00', '#80ff00',
-  '#00ff00', '#00ff80', '#00ffff', '#0080ff',
-  '#0000ff', '#8000ff', '#ff00ff', '#ff0080', '#ff0000',
-];
-
 // ============================================================================
-// GRADIENT SLIDER
+// RAINBOW BAR (Pure React Native - no LinearGradient!)
 // ============================================================================
 
-interface GradientSliderProps {
+const RainbowBar: React.FC = () => {
+  const colors = [
+    '#ff0000', '#ff4000', '#ff8000', '#ffbf00', '#ffff00',
+    '#80ff00', '#00ff00', '#00ff80', '#00ffff', '#0080ff',
+    '#0000ff', '#8000ff', '#ff00ff', '#ff0080',
+  ];
+  
+  return (
+    <View style={styles.rainbowBar}>
+      {colors.map((color, i) => (
+        <View key={i} style={[styles.rainbowSegment, { backgroundColor: color }]} />
+      ))}
+    </View>
+  );
+};
+
+// ============================================================================
+// GRADIENT BAR (Simulated with segments)
+// ============================================================================
+
+const GradientBar: React.FC<{ startColor: string; endColor: string }> = ({ startColor, endColor }) => {
+  // Parse hex to RGB
+  const parseHex = (hex: string) => {
+    const h = hex.replace('#', '');
+    return {
+      r: parseInt(h.substring(0, 2), 16),
+      g: parseInt(h.substring(2, 4), 16),
+      b: parseInt(h.substring(4, 6), 16),
+    };
+  };
+  
+  const start = parseHex(startColor);
+  const end = parseHex(endColor);
+  const segments = 12;
+  
+  const colors = Array.from({ length: segments }, (_, i) => {
+    const t = i / (segments - 1);
+    const r = Math.round(start.r + (end.r - start.r) * t);
+    const g = Math.round(start.g + (end.g - start.g) * t);
+    const b = Math.round(start.b + (end.b - start.b) * t);
+    return `rgb(${r},${g},${b})`;
+  });
+  
+  return (
+    <View style={styles.rainbowBar}>
+      {colors.map((color, i) => (
+        <View key={i} style={[styles.rainbowSegment, { backgroundColor: color }]} />
+      ))}
+    </View>
+  );
+};
+
+// ============================================================================
+// SLIDER
+// ============================================================================
+
+interface SliderProps {
   label: string;
   value: number;
   max: number;
-  gradientColors: string[];
+  type: 'hue' | 'saturation' | 'brightness';
+  hue?: number;
+  saturation?: number;
+  brightness?: number;
   onChange: (value: number) => void;
 }
 
-const GradientSlider: React.FC<GradientSliderProps> = ({ 
-  label, value, max, gradientColors, onChange 
+const Slider: React.FC<SliderProps> = ({ 
+  label, value, max, type, hue = 0, saturation = 100, brightness = 100, onChange 
 }) => {
   const step = max === 360 ? 15 : 5;
   const percentage = (value / max) * 100;
   
   const handleTrackPress = (e: any) => {
     const x = e.nativeEvent.locationX;
-    const trackWidth = width - 120;
+    const trackWidth = width - 140;
     const newVal = Math.round((x / trackWidth) * max);
     onChange(Math.max(0, Math.min(max, newVal)));
   };
+
+  // Generate gradient colors for saturation/brightness
+  const getSatGradient = () => ({
+    start: hsbToHex(hue, 0, brightness),
+    end: hsbToHex(hue, 100, brightness),
+  });
+  
+  const getBriGradient = () => ({
+    start: hsbToHex(hue, saturation, 0),
+    end: hsbToHex(hue, saturation, 100),
+  });
 
   return (
     <View style={styles.sliderContainer}>
@@ -162,12 +223,10 @@ const GradientSlider: React.FC<GradientSliderProps> = ({
           onResponderGrant={handleTrackPress}
           onResponderMove={handleTrackPress}
         >
-          <LinearGradient
-            colors={gradientColors as any}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 0 }}
-            style={styles.sliderTrack}
-          />
+          {type === 'hue' && <RainbowBar />}
+          {type === 'saturation' && <GradientBar {...getSatGradient()} />}
+          {type === 'brightness' && <GradientBar {...getBriGradient()} />}
+          
           <View style={[styles.sliderThumb, { left: `${percentage}%` }]}>
             <View style={styles.sliderThumbInner} />
           </View>
@@ -192,48 +251,38 @@ const ColorPicker: React.FC<{
   value: HSBColor;
   onChange: (color: HSBColor) => void;
 }> = ({ value, onChange }) => {
-  const satColors = [
-    hsbToHex(value.h, 0, value.b),
-    hsbToHex(value.h, 100, value.b),
-  ];
-  const briColors = [
-    hsbToHex(value.h, value.s, 0),
-    hsbToHex(value.h, value.s, 100),
-  ];
-
   return (
     <View style={styles.pickerContainer}>
       <View style={styles.previewContainer}>
         <View 
           style={[styles.colorPreview, { backgroundColor: hsbToHex(value.h, value.s, value.b) }]}
-        >
-          <LinearGradient
-            colors={['rgba(255,255,255,0.3)', 'transparent']}
-            style={styles.previewShine}
-          />
-        </View>
+        />
       </View>
 
       <View style={styles.slidersCard}>
-        <GradientSlider
+        <Slider
           label="Farbton"
           value={value.h}
           max={360}
-          gradientColors={HUE_COLORS}
+          type="hue"
           onChange={(h) => onChange({ ...value, h })}
         />
-        <GradientSlider
+        <Slider
           label="Sättigung"
           value={value.s}
           max={100}
-          gradientColors={satColors}
+          type="saturation"
+          hue={value.h}
+          brightness={value.b}
           onChange={(s) => onChange({ ...value, s })}
         />
-        <GradientSlider
+        <Slider
           label="Helligkeit"
           value={value.b}
           max={100}
-          gradientColors={briColors}
+          type="brightness"
+          hue={value.h}
+          saturation={value.s}
           onChange={(b) => onChange({ ...value, b })}
         />
       </View>
@@ -249,28 +298,21 @@ const ModeButton: React.FC<{
   icon: string;
   title: string;
   subtitle: string;
-  colors: string[];
+  color: string;
   onPress: () => void;
   disabled?: boolean;
-}> = ({ icon, title, subtitle, colors, onPress, disabled }) => (
+}> = ({ icon, title, subtitle, color, onPress, disabled }) => (
   <TouchableOpacity 
     onPress={onPress} 
     activeOpacity={0.8} 
     disabled={disabled}
-    style={disabled && styles.disabledButton}
+    style={[styles.modeButton, { backgroundColor: color }, disabled && styles.disabledButton]}
   >
-    <LinearGradient
-      colors={colors as any}
-      start={{ x: 0, y: 0 }}
-      end={{ x: 1, y: 0 }}
-      style={styles.modeButton}
-    >
-      <Text style={styles.modeIcon}>{icon}</Text>
-      <View style={styles.modeText}>
-        <Text style={styles.modeTitle}>{title}</Text>
-        <Text style={styles.modeSubtitle}>{subtitle}</Text>
-      </View>
-    </LinearGradient>
+    <Text style={styles.modeIcon}>{icon}</Text>
+    <View style={styles.modeText}>
+      <Text style={styles.modeTitle}>{title}</Text>
+      <Text style={styles.modeSubtitle}>{subtitle}</Text>
+    </View>
   </TouchableOpacity>
 );
 
@@ -336,9 +378,10 @@ export default function App() {
     startGame('multiplayer', seed);
   }, [roomCode, startGame]);
 
-  const copyCode = useCallback(() => {
-    Clipboard.setString(roomCode);
-    Alert.alert('Kopiert!', `Code ${roomCode} wurde kopiert`);
+  const copyCode = useCallback(async () => {
+    try {
+      Alert.alert('Code', `Dein Code: ${roomCode}\n\nTeile ihn mit deinen Freunden!`);
+    } catch {}
   }, [roomCode]);
 
   useEffect(() => {
@@ -381,11 +424,11 @@ export default function App() {
     let text = '';
     
     if (mode === 'multiplayer') {
-      text = `ColorMind Duell ${emoji}\nCode: ${roomCode}\nMein Score: ${totalScore.toFixed(1)}/50\n\nKannst du das schlagen?\ncolormind.app`;
+      text = `ColorMind Duell ${emoji}\nCode: ${roomCode}\nMein Score: ${totalScore.toFixed(1)}/50\n\nKannst du das schlagen?`;
     } else if (mode === 'daily') {
-      text = `ColorMind Daily ${emoji}\n${totalScore.toFixed(1)}/50 • Top ${percentile}%\n\ncolormind.app`;
+      text = `ColorMind Daily ${emoji}\n${totalScore.toFixed(1)}/50 • Top ${percentile}%`;
     } else {
-      text = `ColorMind ${emoji}\n${totalScore.toFixed(1)}/50 • Top ${percentile}%\n\ncolormind.app`;
+      text = `ColorMind ${emoji}\n${totalScore.toFixed(1)}/50 • Top ${percentile}%`;
     }
     
     try { await Share.share({ message: text }); } catch {}
@@ -399,12 +442,7 @@ export default function App() {
 
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="light-content" />
-      
-      <LinearGradient
-        colors={['#0a0a1a', '#1a1030', '#0a0a1a']}
-        style={StyleSheet.absoluteFill}
-      />
+      <StatusBar barStyle="light-content" backgroundColor="#0a0a1a" />
 
       {/* Header */}
       <View style={styles.header}>
@@ -435,7 +473,7 @@ export default function App() {
                 icon="🎯"
                 title="Solo"
                 subtitle="Übe alleine"
-                colors={['#2997ff', '#af52de']}
+                color="#2997ff"
                 onPress={() => startGame('solo')}
               />
               
@@ -443,7 +481,7 @@ export default function App() {
                 icon="📅"
                 title="Daily Challenge"
                 subtitle={dailyPlayed ? `Heute: ${dailyScore?.toFixed(1)}/50` : "Gleiche Farben für alle"}
-                colors={dailyPlayed ? ['#444', '#555'] : ['#00d4aa', '#00a67d']}
+                color={dailyPlayed ? '#444' : '#00a67d'}
                 onPress={() => startGame('daily')}
                 disabled={dailyPlayed}
               />
@@ -452,7 +490,7 @@ export default function App() {
                 icon="👥"
                 title="Multiplayer"
                 subtitle="Fordere Freunde heraus"
-                colors={['#ff6b35', '#f7931e']}
+                color="#ff6b35"
                 onPress={() => setPhase('multiplayer-menu')}
               />
             </View>
@@ -472,7 +510,7 @@ export default function App() {
                 icon="➕"
                 title="Raum erstellen"
                 subtitle="Erstelle einen Code für Freunde"
-                colors={['#2997ff', '#af52de']}
+                color="#2997ff"
                 onPress={createRoom}
               />
               
@@ -480,7 +518,7 @@ export default function App() {
                 icon="🔗"
                 title="Raum beitreten"
                 subtitle="Gib einen Code ein"
-                colors={['#00d4aa', '#00a67d']}
+                color="#00a67d"
                 onPress={() => setPhase('join-room')}
               />
             </View>
@@ -502,18 +540,11 @@ export default function App() {
             </Text>
             
             <TouchableOpacity style={styles.copyButton} onPress={copyCode}>
-              <Text style={styles.copyButtonText}>📋 Code kopieren</Text>
+              <Text style={styles.copyButtonText}>📋 Code anzeigen</Text>
             </TouchableOpacity>
             
-            <TouchableOpacity onPress={startMultiplayerGame} activeOpacity={0.8}>
-              <LinearGradient
-                colors={['#2997ff', '#af52de']}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
-                style={styles.startButton}
-              >
-                <Text style={styles.startButtonText}>🎮 Spiel starten</Text>
-              </LinearGradient>
+            <TouchableOpacity style={styles.startButton} onPress={startMultiplayerGame}>
+              <Text style={styles.startButtonText}>🎮 Spiel starten</Text>
             </TouchableOpacity>
           </View>
         )}
@@ -539,15 +570,12 @@ export default function App() {
               den du von deinem Freund bekommen hast.
             </Text>
             
-            <TouchableOpacity onPress={joinRoom} activeOpacity={0.8}>
-              <LinearGradient
-                colors={inputCode.length === 4 ? ['#2997ff', '#af52de'] : ['#444', '#555']}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
-                style={styles.startButton}
-              >
-                <Text style={styles.startButtonText}>🎮 Beitreten & Spielen</Text>
-              </LinearGradient>
+            <TouchableOpacity 
+              style={[styles.startButton, inputCode.length !== 4 && styles.disabledButton]} 
+              onPress={joinRoom}
+              disabled={inputCode.length !== 4}
+            >
+              <Text style={styles.startButtonText}>🎮 Beitreten & Spielen</Text>
             </TouchableOpacity>
           </View>
         )}
@@ -583,12 +611,7 @@ export default function App() {
                   styles.memorizeColor, 
                   { backgroundColor: hsbToHex(targets[idx].h, targets[idx].s, targets[idx].b) }
                 ]}
-              >
-                <LinearGradient
-                  colors={['rgba(255,255,255,0.2)', 'transparent']}
-                  style={styles.colorShine}
-                />
-              </View>
+              />
             </View>
             
             <Text style={styles.hint}>Präge dir diese Farbe ein!</Text>
@@ -621,17 +644,10 @@ export default function App() {
             
             <ColorPicker value={guess} onChange={setGuess} />
 
-            <TouchableOpacity onPress={submitGuess} activeOpacity={0.8}>
-              <LinearGradient
-                colors={['#2997ff', '#af52de']}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
-                style={styles.submitButton}
-              >
-                <Text style={styles.submitButtonText}>
-                  {idx < N - 1 ? 'Weiter →' : 'Ergebnis'}
-                </Text>
-              </LinearGradient>
+            <TouchableOpacity style={styles.submitButton} onPress={submitGuess}>
+              <Text style={styles.submitButtonText}>
+                {idx < N - 1 ? 'Weiter →' : 'Ergebnis'}
+              </Text>
             </TouchableOpacity>
           </View>
         )}
@@ -654,12 +670,9 @@ export default function App() {
             <Text style={styles.totalScore}>{totalScore.toFixed(1)}</Text>
             <Text style={styles.totalScoreLabel}>von 50 Punkten</Text>
             
-            <LinearGradient
-              colors={['rgba(41,151,255,0.2)', 'rgba(175,82,222,0.2)']}
-              style={styles.percentileBadge}
-            >
+            <View style={styles.percentileBadge}>
               <Text style={styles.percentileText}>Top {percentile}%</Text>
-            </LinearGradient>
+            </View>
 
             <View style={styles.resultsCard}>
               {targets.map((target, i) => (
@@ -682,15 +695,8 @@ export default function App() {
               </Text>
             </TouchableOpacity>
 
-            <TouchableOpacity onPress={goToMenu} activeOpacity={0.8}>
-              <LinearGradient
-                colors={['#2997ff', '#af52de']}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
-                style={styles.submitButton}
-              >
-                <Text style={styles.submitButtonText}>Zurück zum Menü</Text>
-              </LinearGradient>
+            <TouchableOpacity style={styles.submitButton} onPress={goToMenu}>
+              <Text style={styles.submitButtonText}>Zurück zum Menü</Text>
             </TouchableOpacity>
           </View>
         )}
@@ -747,7 +753,7 @@ const styles = StyleSheet.create({
   modeText: { flex: 1 },
   modeTitle: { fontSize: 18, fontWeight: '700', color: '#fff' },
   modeSubtitle: { fontSize: 13, color: 'rgba(255,255,255,0.7)', marginTop: 2 },
-  disabledButton: { opacity: 0.6 },
+  disabledButton: { opacity: 0.5 },
 
   // Room
   roomContainer: { alignItems: 'center', paddingTop: 40 },
@@ -797,6 +803,7 @@ const styles = StyleSheet.create({
   },
   copyButtonText: { fontSize: 16, fontWeight: '600', color: '#fff' },
   startButton: {
+    backgroundColor: '#2997ff',
     paddingVertical: 18,
     paddingHorizontal: 40,
     borderRadius: 30,
@@ -830,16 +837,13 @@ const styles = StyleSheet.create({
     width: width * 0.55,
     height: width * 0.55,
     borderRadius: 30,
-    overflow: 'hidden',
   },
-  colorShine: { position: 'absolute', top: 0, left: 0, right: 0, height: '50%' },
   hint: { fontSize: 14, color: 'rgba(255,255,255,0.4)' },
 
   // Color Picker
   pickerContainer: { width: '100%', marginVertical: 16 },
   previewContainer: { alignItems: 'center', marginBottom: 20 },
-  colorPreview: { width: 100, height: 100, borderRadius: 24, overflow: 'hidden' },
-  previewShine: { position: 'absolute', top: 0, left: 0, right: 0, height: '50%' },
+  colorPreview: { width: 100, height: 100, borderRadius: 24 },
   slidersCard: {
     backgroundColor: 'rgba(255,255,255,0.05)',
     borderRadius: 24,
@@ -874,7 +878,15 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     position: 'relative',
   },
-  sliderTrack: { flex: 1 },
+  rainbowBar: {
+    flex: 1,
+    flexDirection: 'row',
+    height: '100%',
+  },
+  rainbowSegment: {
+    flex: 1,
+    height: '100%',
+  },
   sliderThumb: {
     position: 'absolute',
     top: 4,
@@ -897,6 +909,7 @@ const styles = StyleSheet.create({
   },
   submitButton: {
     width: width - 48,
+    backgroundColor: '#2997ff',
     paddingVertical: 18,
     borderRadius: 30,
     alignItems: 'center',
@@ -909,7 +922,13 @@ const styles = StyleSheet.create({
   resultsEmoji: { fontSize: 64 },
   totalScore: { fontSize: 72, fontWeight: '800', color: '#fff' },
   totalScoreLabel: { fontSize: 16, color: 'rgba(255,255,255,0.4)' },
-  percentileBadge: { paddingVertical: 12, paddingHorizontal: 24, borderRadius: 30, marginVertical: 16 },
+  percentileBadge: { 
+    backgroundColor: 'rgba(41,151,255,0.2)',
+    paddingVertical: 12, 
+    paddingHorizontal: 24, 
+    borderRadius: 30, 
+    marginVertical: 16 
+  },
   percentileText: { fontSize: 16, fontWeight: '600', color: '#2997ff' },
   resultsCard: {
     width: '100%',
