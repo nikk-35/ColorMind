@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   StyleSheet,
   View,
@@ -10,9 +10,12 @@ import {
   Share,
   TextInput,
   Alert,
+  PanResponder,
+  Animated,
 } from 'react-native';
 
 const { width } = Dimensions.get('window');
+const SLIDER_WIDTH = width - 100;
 
 // ============================================================================
 // TYPES
@@ -105,10 +108,10 @@ const getEmoji = (p: number): string => {
 };
 
 // ============================================================================
-// SIMPLE BUTTON SLIDER (NO TOUCH GESTURES - JUST BUTTONS!)
+// CUSTOM SLIDER WITH PAN RESPONDER
 // ============================================================================
 
-interface SimpleSliderProps {
+interface CustomSliderProps {
   label: string;
   value: number;
   max: number;
@@ -116,10 +119,33 @@ interface SimpleSliderProps {
   onChange: (value: number) => void;
 }
 
-const SimpleSlider: React.FC<SimpleSliderProps> = ({ label, value, max, colors, onChange }) => {
-  const step = max === 360 ? 30 : 10;
-  const fineStep = max === 360 ? 10 : 5;
+const CustomSlider: React.FC<CustomSliderProps> = ({ label, value, max, colors, onChange }) => {
+  const sliderRef = useRef<View>(null);
+  const position = useRef(new Animated.Value((value / max) * SLIDER_WIDTH)).current;
   
+  useEffect(() => {
+    position.setValue((value / max) * SLIDER_WIDTH);
+  }, [value, max]);
+
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: () => true,
+      onPanResponderGrant: (evt) => {
+        const x = evt.nativeEvent.locationX;
+        const newValue = Math.round((x / SLIDER_WIDTH) * max);
+        onChange(Math.max(0, Math.min(max, newValue)));
+      },
+      onPanResponderMove: (evt) => {
+        const x = evt.nativeEvent.locationX;
+        const newValue = Math.round((x / SLIDER_WIDTH) * max);
+        onChange(Math.max(0, Math.min(max, newValue)));
+      },
+    })
+  ).current;
+
+  const thumbPosition = (value / max) * SLIDER_WIDTH;
+
   return (
     <View style={styles.sliderContainer}>
       <View style={styles.sliderHeader}>
@@ -127,48 +153,22 @@ const SimpleSlider: React.FC<SimpleSliderProps> = ({ label, value, max, colors, 
         <Text style={styles.sliderValue}>{value}{max === 360 ? '°' : '%'}</Text>
       </View>
       
-      {/* Color preview bar */}
-      <View style={styles.colorBar}>
-        {colors.map((color, i) => (
-          <View key={i} style={[styles.colorSegment, { backgroundColor: color }]} />
-        ))}
-        {/* Indicator */}
-        <View style={[styles.indicator, { left: `${(value / max) * 100}%` }]} />
-      </View>
-      
-      {/* Control buttons */}
-      <View style={styles.buttonRow}>
-        <TouchableOpacity 
-          style={styles.stepBtn} 
-          onPress={() => onChange(Math.max(0, value - step))}
+      <View style={styles.sliderWrapper}>
+        <View 
+          ref={sliderRef}
+          style={styles.sliderTrack}
+          {...panResponder.panHandlers}
         >
-          <Text style={styles.stepBtnText}>−−</Text>
-        </TouchableOpacity>
-        
-        <TouchableOpacity 
-          style={styles.stepBtn} 
-          onPress={() => onChange(Math.max(0, value - fineStep))}
-        >
-          <Text style={styles.stepBtnText}>−</Text>
-        </TouchableOpacity>
-        
-        <View style={styles.valueDisplay}>
-          <Text style={styles.valueText}>{value}</Text>
+          {/* Color gradient */}
+          <View style={styles.gradientContainer}>
+            {colors.map((color, i) => (
+              <View key={i} style={[styles.gradientSegment, { backgroundColor: color }]} />
+            ))}
+          </View>
+          
+          {/* Thumb */}
+          <View style={[styles.thumb, { left: thumbPosition - 12 }]} />
         </View>
-        
-        <TouchableOpacity 
-          style={styles.stepBtn} 
-          onPress={() => onChange(Math.min(max, value + fineStep))}
-        >
-          <Text style={styles.stepBtnText}>+</Text>
-        </TouchableOpacity>
-        
-        <TouchableOpacity 
-          style={styles.stepBtn} 
-          onPress={() => onChange(Math.min(max, value + step))}
-        >
-          <Text style={styles.stepBtnText}>++</Text>
-        </TouchableOpacity>
       </View>
     </View>
   );
@@ -182,38 +182,38 @@ const ColorPicker: React.FC<{
   value: HSBColor;
   onChange: (color: HSBColor) => void;
 }> = ({ value, onChange }) => {
-  // Rainbow colors for hue
   const hueColors = [
-    '#ff0000', '#ff8000', '#ffff00', '#00ff00', 
-    '#00ffff', '#0000ff', '#ff00ff', '#ff0000'
+    '#ff0000', '#ff8000', '#ffff00', '#80ff00',
+    '#00ff00', '#00ff80', '#00ffff', '#0080ff',
+    '#0000ff', '#8000ff', '#ff00ff', '#ff0080', '#ff0000'
   ];
   
-  // Saturation gradient
   const satColors = [
     hsbToHex(value.h, 0, value.b),
+    hsbToHex(value.h, 25, value.b),
     hsbToHex(value.h, 50, value.b),
+    hsbToHex(value.h, 75, value.b),
     hsbToHex(value.h, 100, value.b),
   ];
   
-  // Brightness gradient
   const briColors = [
     hsbToHex(value.h, value.s, 0),
+    hsbToHex(value.h, value.s, 25),
     hsbToHex(value.h, value.s, 50),
+    hsbToHex(value.h, value.s, 75),
     hsbToHex(value.h, value.s, 100),
   ];
 
   return (
     <View style={styles.pickerContainer}>
-      {/* Color Preview */}
       <View style={styles.previewContainer}>
         <View 
           style={[styles.colorPreview, { backgroundColor: hsbToHex(value.h, value.s, value.b) }]}
         />
       </View>
 
-      {/* Sliders */}
       <View style={styles.slidersCard}>
-        <SimpleSlider
+        <CustomSlider
           label="Farbton"
           value={value.h}
           max={360}
@@ -221,7 +221,7 @@ const ColorPicker: React.FC<{
           onChange={(h) => onChange({ ...value, h })}
         />
         
-        <SimpleSlider
+        <CustomSlider
           label="Sättigung"
           value={value.s}
           max={100}
@@ -229,7 +229,7 @@ const ColorPicker: React.FC<{
           onChange={(s) => onChange({ ...value, s })}
         />
         
-        <SimpleSlider
+        <CustomSlider
           label="Helligkeit"
           value={value.b}
           max={100}
@@ -393,7 +393,6 @@ export default function App() {
     <View style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor="#0a0a1a" />
 
-      {/* Header */}
       <View style={styles.header}>
         <Text style={styles.logo}>
           Color<Text style={styles.logoAccent}>Mind</Text>
@@ -409,6 +408,7 @@ export default function App() {
         style={styles.content} 
         contentContainerStyle={styles.contentInner}
         showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
       >
         {/* MAIN MENU */}
         {phase === 'menu' && (
@@ -488,8 +488,8 @@ export default function App() {
               Ihr spielt die gleichen Farben!
             </Text>
             
-            <TouchableOpacity style={styles.copyButton} onPress={copyCode}>
-              <Text style={styles.copyButtonText}>📋 Code anzeigen</Text>
+            <TouchableOpacity style={styles.secondaryButton} onPress={copyCode}>
+              <Text style={styles.secondaryButtonText}>📋 Code anzeigen</Text>
             </TouchableOpacity>
             
             <TouchableOpacity style={styles.primaryButton} onPress={startMultiplayerGame}>
@@ -729,14 +729,6 @@ const styles = StyleSheet.create({
     marginBottom: 24,
     lineHeight: 20,
   },
-  copyButton: {
-    backgroundColor: 'rgba(255,255,255,0.1)',
-    paddingVertical: 12,
-    paddingHorizontal: 24,
-    borderRadius: 24,
-    marginBottom: 12,
-  },
-  copyButtonText: { fontSize: 16, fontWeight: '600', color: '#fff' },
 
   // Buttons
   primaryButton: {
@@ -801,12 +793,12 @@ const styles = StyleSheet.create({
     padding: 16,
   },
 
-  // Simple Slider
-  sliderContainer: { marginBottom: 16 },
+  // Slider
+  sliderContainer: { marginBottom: 20 },
   sliderHeader: { 
     flexDirection: 'row', 
     justifyContent: 'space-between', 
-    marginBottom: 8 
+    marginBottom: 12,
   },
   sliderLabel: {
     fontSize: 12,
@@ -819,53 +811,38 @@ const styles = StyleSheet.create({
     fontWeight: '600', 
     color: 'rgba(255,255,255,0.7)' 
   },
-  colorBar: {
-    height: 24,
-    borderRadius: 12,
-    flexDirection: 'row',
+  sliderWrapper: {
+    paddingHorizontal: 12,
+  },
+  sliderTrack: {
+    height: 32,
+    borderRadius: 16,
     overflow: 'hidden',
-    marginBottom: 10,
     position: 'relative',
   },
-  colorSegment: { flex: 1 },
-  indicator: {
+  gradientContainer: {
+    flexDirection: 'row',
+    height: '100%',
+    borderRadius: 16,
+    overflow: 'hidden',
+  },
+  gradientSegment: {
+    flex: 1,
+    height: '100%',
+  },
+  thumb: {
     position: 'absolute',
-    top: 2,
-    width: 20,
-    height: 20,
-    marginLeft: -10,
+    top: 4,
+    width: 24,
+    height: 24,
     backgroundColor: '#fff',
-    borderRadius: 10,
+    borderRadius: 12,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.3,
-    shadowRadius: 3,
-    elevation: 4,
+    shadowRadius: 4,
+    elevation: 5,
   },
-  buttonRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-  },
-  stepBtn: {
-    width: 44,
-    height: 44,
-    backgroundColor: 'rgba(255,255,255,0.1)',
-    borderRadius: 22,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  stepBtnText: { fontSize: 18, color: '#fff', fontWeight: '600' },
-  valueDisplay: {
-    backgroundColor: 'rgba(41,151,255,0.2)',
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    borderRadius: 12,
-    minWidth: 60,
-    alignItems: 'center',
-  },
-  valueText: { fontSize: 16, fontWeight: '700', color: '#2997ff' },
 
   // Results
   resultsContainer: { alignItems: 'center', paddingTop: 10 },
