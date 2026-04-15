@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   StyleSheet,
   View,
@@ -11,8 +11,10 @@ import {
   TextInput,
   Alert,
 } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 
 const { width } = Dimensions.get('window');
+const TRACK_WIDTH = width - 80;
 
 // ============================================================================
 // TYPES
@@ -104,8 +106,15 @@ const getEmoji = (p: number): string => {
   return '⭐';
 };
 
+// Rainbow colors for smooth hue gradient
+const HUE_GRADIENT: readonly string[] = [
+  '#ff0000', '#ff8000', '#ffff00', '#80ff00',
+  '#00ff00', '#00ff80', '#00ffff', '#0080ff',
+  '#0000ff', '#8000ff', '#ff00ff', '#ff0080', '#ff0000'
+] as const;
+
 // ============================================================================
-// COLOR PICKER - Direct state management, no closures
+// COLOR PICKER
 // ============================================================================
 
 interface ColorPickerProps {
@@ -117,53 +126,25 @@ interface ColorPickerProps {
   onBriChange: (v: number) => void;
 }
 
-const TRACK_WIDTH = width - 80;
-
-// Generate smooth gradient with many steps
-const generateHueGradient = (): string[] => {
-  const colors: string[] = [];
-  for (let i = 0; i <= 36; i++) {
-    colors.push(hsbToHex(i * 10, 100, 100));
-  }
-  return colors;
-};
-
-const generateSatGradient = (h: number, b: number): string[] => {
-  const colors: string[] = [];
-  for (let i = 0; i <= 20; i++) {
-    colors.push(hsbToHex(h, i * 5, b));
-  }
-  return colors;
-};
-
-const generateBriGradient = (h: number, s: number): string[] => {
-  const colors: string[] = [];
-  for (let i = 0; i <= 20; i++) {
-    colors.push(hsbToHex(h, s, i * 5));
-  }
-  return colors;
-};
-
 const ColorPicker: React.FC<ColorPickerProps> = ({
   hue, saturation, brightness,
   onHueChange, onSatChange, onBriChange
 }) => {
-  const hueColors = generateHueGradient();
-  const satColors = generateSatGradient(hue, brightness);
-  const briColors = generateBriGradient(hue, saturation);
-
   const handleSliderTouch = (e: any, max: number, setter: (v: number) => void) => {
     const x = e.nativeEvent.locationX;
     const percentage = Math.max(0, Math.min(1, x / TRACK_WIDTH));
     setter(Math.round(percentage * max));
   };
 
+  const satStart = hsbToHex(hue, 0, brightness);
+  const satEnd = hsbToHex(hue, 100, brightness);
+  const briStart = hsbToHex(hue, saturation, 0);
+  const briEnd = hsbToHex(hue, saturation, 100);
+
   return (
     <View style={styles.pickerContainer}>
       <View style={styles.previewContainer}>
-        <View 
-          style={[styles.colorPreview, { backgroundColor: hsbToHex(hue, saturation, brightness) }]}
-        />
+        <View style={[styles.colorPreview, { backgroundColor: hsbToHex(hue, saturation, brightness) }]} />
       </View>
 
       <View style={styles.slidersCard}>
@@ -180,9 +161,12 @@ const ColorPicker: React.FC<ColorPickerProps> = ({
             onResponderGrant={(e) => handleSliderTouch(e, 360, onHueChange)}
             onResponderMove={(e) => handleSliderTouch(e, 360, onHueChange)}
           >
-            <View style={styles.gradientContainer}>
-              {hueColors.map((c, i) => <View key={i} style={[styles.gradientSegment, { backgroundColor: c }]} />)}
-            </View>
+            <LinearGradient
+              colors={HUE_GRADIENT as unknown as string[]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+              style={styles.gradient}
+            />
             <View style={[styles.thumb, { left: (hue / 360) * TRACK_WIDTH - 14 }]} />
           </View>
         </View>
@@ -200,9 +184,12 @@ const ColorPicker: React.FC<ColorPickerProps> = ({
             onResponderGrant={(e) => handleSliderTouch(e, 100, onSatChange)}
             onResponderMove={(e) => handleSliderTouch(e, 100, onSatChange)}
           >
-            <View style={styles.gradientContainer}>
-              {satColors.map((c, i) => <View key={i} style={[styles.gradientSegment, { backgroundColor: c }]} />)}
-            </View>
+            <LinearGradient
+              colors={[satStart, satEnd]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+              style={styles.gradient}
+            />
             <View style={[styles.thumb, { left: (saturation / 100) * TRACK_WIDTH - 14 }]} />
           </View>
         </View>
@@ -220,9 +207,12 @@ const ColorPicker: React.FC<ColorPickerProps> = ({
             onResponderGrant={(e) => handleSliderTouch(e, 100, onBriChange)}
             onResponderMove={(e) => handleSliderTouch(e, 100, onBriChange)}
           >
-            <View style={styles.gradientContainer}>
-              {briColors.map((c, i) => <View key={i} style={[styles.gradientSegment, { backgroundColor: c }]} />)}
-            </View>
+            <LinearGradient
+              colors={[briStart, briEnd]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+              style={styles.gradient}
+            />
             <View style={[styles.thumb, { left: (brightness / 100) * TRACK_WIDTH - 14 }]} />
           </View>
         </View>
@@ -270,7 +260,6 @@ export default function App() {
   const [guesses, setGuesses] = useState<HSBColor[]>([]);
   const [idx, setIdx] = useState(0);
   
-  // Separate state for each slider value
   const [guessH, setGuessH] = useState(180);
   const [guessS, setGuessS] = useState(50);
   const [guessB, setGuessB] = useState(75);
@@ -823,16 +812,11 @@ const styles = StyleSheet.create({
     height: 36,
     borderRadius: 18,
     position: 'relative',
-  },
-  gradientContainer: {
-    flexDirection: 'row',
-    height: 36,
-    borderRadius: 18,
     overflow: 'hidden',
   },
-  gradientSegment: {
+  gradient: {
     flex: 1,
-    height: '100%',
+    borderRadius: 18,
   },
   thumb: {
     position: 'absolute',
