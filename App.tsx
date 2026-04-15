@@ -119,31 +119,38 @@ interface ColorPickerProps {
 
 const TRACK_WIDTH = width - 80;
 
+// Generate smooth gradient with many steps
+const generateHueGradient = (): string[] => {
+  const colors: string[] = [];
+  for (let i = 0; i <= 36; i++) {
+    colors.push(hsbToHex(i * 10, 100, 100));
+  }
+  return colors;
+};
+
+const generateSatGradient = (h: number, b: number): string[] => {
+  const colors: string[] = [];
+  for (let i = 0; i <= 20; i++) {
+    colors.push(hsbToHex(h, i * 5, b));
+  }
+  return colors;
+};
+
+const generateBriGradient = (h: number, s: number): string[] => {
+  const colors: string[] = [];
+  for (let i = 0; i <= 20; i++) {
+    colors.push(hsbToHex(h, s, i * 5));
+  }
+  return colors;
+};
+
 const ColorPicker: React.FC<ColorPickerProps> = ({
   hue, saturation, brightness,
   onHueChange, onSatChange, onBriChange
 }) => {
-  const hueColors = [
-    '#ff0000', '#ff8000', '#ffff00', '#80ff00',
-    '#00ff00', '#00ff80', '#00ffff', '#0080ff',
-    '#0000ff', '#8000ff', '#ff00ff', '#ff0080', '#ff0000'
-  ];
-  
-  const satColors = [
-    hsbToHex(hue, 0, brightness),
-    hsbToHex(hue, 25, brightness),
-    hsbToHex(hue, 50, brightness),
-    hsbToHex(hue, 75, brightness),
-    hsbToHex(hue, 100, brightness),
-  ];
-  
-  const briColors = [
-    hsbToHex(hue, saturation, 0),
-    hsbToHex(hue, saturation, 25),
-    hsbToHex(hue, saturation, 50),
-    hsbToHex(hue, saturation, 75),
-    hsbToHex(hue, saturation, 100),
-  ];
+  const hueColors = generateHueGradient();
+  const satColors = generateSatGradient(hue, brightness);
+  const briColors = generateBriGradient(hue, saturation);
 
   const handleSliderTouch = (e: any, max: number, setter: (v: number) => void) => {
     const x = e.nativeEvent.locationX;
