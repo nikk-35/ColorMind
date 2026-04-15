@@ -16,6 +16,7 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import { supabase, Profile, Score } from './src/supabase';
+import { initializeAds, loadInterstitial, showInterstitial, BannerAd, BannerAdSize, AD_IDS } from './src/ads';
 
 const { width } = Dimensions.get('window');
 const TRACK_WIDTH = width - 80;
@@ -274,6 +275,10 @@ export default function App() {
   // Leaderboard
   const [leaderboard, setLeaderboard] = useState<Score[]>([]);
   const [leaderboardMode, setLeaderboardMode] = useState<'daily' | 'alltime'>('daily');
+  
+  // Ads
+  const [isPremium, setIsPremium] = useState(false);
+  const [adsReady, setAdsReady] = useState(false);
 
   const N = 5;
 
@@ -283,6 +288,7 @@ export default function App() {
 
   useEffect(() => {
     checkSession();
+    initAds();
     
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user ?? null);
@@ -293,6 +299,19 @@ export default function App() {
 
     return () => subscription.unsubscribe();
   }, []);
+
+  // Initialize ads
+  const initAds = async () => {
+    try {
+      const success = await initializeAds();
+      if (success) {
+        setAdsReady(true);
+        loadInterstitial();
+      }
+    } catch (error) {
+      console.log('Ads init error:', error);
+    }
+  };
 
   const checkSession = async () => {
     try {
@@ -524,8 +543,15 @@ export default function App() {
       }
       
       setScreen('results');
+      
+      // Show interstitial ad (if not premium)
+      if (!isPremium && adsReady) {
+        setTimeout(() => {
+          showInterstitial();
+        }, 1500);
+      }
     }
-  }, [guessH, guessS, guessB, guesses, idx, targets, mode, profile, user]);
+  }, [guessH, guessS, guessB, guesses, idx, targets, mode, profile, user, isPremium, adsReady]);
 
   const totalScore = scores.reduce((a, b) => a + b, 0);
   const percentile = getPercentile(totalScore);
@@ -672,25 +698,44 @@ export default function App() {
 
       {/* MAIN MENU */}
       {screen === 'menu' && (
-        <ScrollView style={styles.content} contentContainerStyle={styles.contentInner}>
-          <View style={styles.menuContainer}>
-            <Text style={styles.menuTitle}>Wie gut ist dein{'\n'}Farbgedächtnis?</Text>
-            
-            <View style={styles.modesContainer}>
-              <ModeButton icon="🎯" title="Solo" subtitle="Übe alleine" color="#2997ff" onPress={() => startGame('solo')} />
-              <ModeButton 
-                icon="📅" 
-                title="Daily Challenge" 
-                subtitle={dailyPlayed ? `Heute: ${dailyScore?.toFixed(1)}/50` : "Gleiche Farben für alle"} 
-                color={dailyPlayed ? '#444' : '#00a67d'} 
-                onPress={() => startGame('daily')} 
-                disabled={dailyPlayed} 
-              />
-              <ModeButton icon="👥" title="Multiplayer" subtitle="Fordere Freunde heraus" color="#ff6b35" onPress={() => setScreen('multiplayer-menu')} />
-              <ModeButton icon="🏆" title="Leaderboard" subtitle="Top Spieler" color="#8b5cf6" onPress={() => loadLeaderboard('daily')} />
+        <>
+          <ScrollView style={styles.content} contentContainerStyle={styles.contentInner}>
+            <View style={styles.menuContainer}>
+              <Text style={styles.menuTitle}>Wie gut ist dein{'\n'}Farbgedächtnis?</Text>
+              
+              <View style={styles.modesContainer}>
+                <ModeButton icon="🎯" title="Solo" subtitle="Übe alleine" color="#2997ff" onPress={() => startGame('solo')} />
+                <ModeButton 
+                  icon="📅" 
+                  title="Daily Challenge" 
+                  subtitle={dailyPlayed ? `Heute: ${dailyScore?.toFixed(1)}/50` : "Gleiche Farben für alle"} 
+                  color={dailyPlayed ? '#444' : '#00a67d'} 
+                  onPress={() => startGame('daily')} 
+                  disabled={dailyPlayed} 
+                />
+                <ModeButton icon="👥" title="Multiplayer" subtitle="Fordere Freunde heraus" color="#ff6b35" onPress={() => setScreen('multiplayer-menu')} />
+                <ModeButton icon="🏆" title="Leaderboard" subtitle="Top Spieler" color="#8b5cf6" onPress={() => loadLeaderboard('daily')} />
+              </View>
+              
+              {!isPremium && (
+                <TouchableOpacity style={styles.premiumButton} onPress={() => Alert.alert('Premium', 'Werbung entfernen für €2.99\n\nKommt bald!')}>
+                  <Text style={styles.premiumButtonText}>✨ Werbung entfernen</Text>
+                </TouchableOpacity>
+              )}
             </View>
-          </View>
-        </ScrollView>
+          </ScrollView>
+          
+          {/* Banner Ad */}
+          {!isPremium && adsReady && Platform.OS !== 'web' && (
+            <View style={styles.bannerContainer}>
+              <BannerAd
+                unitId={AD_IDS.banner}
+                size={BannerAdSize.ANCHORED_ADAPTIVE_BANNER}
+                requestOptions={{ requestNonPersonalizedAdsOnly: true }}
+              />
+            </View>
+          )}
+        </>
       )}
 
       {/* MULTIPLAYER MENU */}
@@ -942,4 +987,9 @@ const styles = StyleSheet.create({
   lbName: { flex: 1, fontSize: 16, color: '#fff', fontWeight: '500' },
   lbScore: { fontSize: 18, fontWeight: '700', color: '#2997ff' },
   lbEmpty: { color: 'rgba(255,255,255,0.5)', textAlign: 'center', marginTop: 40 },
+
+  // Ads & Premium
+  bannerContainer: { position: 'absolute', bottom: 0, left: 0, right: 0, alignItems: 'center', backgroundColor: '#0a0a1a' },
+  premiumButton: { marginTop: 24, backgroundColor: 'rgba(255,215,0,0.2)', paddingVertical: 14, paddingHorizontal: 24, borderRadius: 24, borderWidth: 1, borderColor: 'rgba(255,215,0,0.5)' },
+  premiumButtonText: { color: '#ffd700', fontSize: 15, fontWeight: '600' },
 });

@@ -1,115 +1,81 @@
-import {
-  InterstitialAd,
-  RewardedAd,
-  BannerAd,
-  BannerAdSize,
-  TestIds,
+import { Platform } from 'react-native';
+import mobileAds, { 
+  BannerAd, 
+  BannerAdSize, 
+  InterstitialAd, 
   AdEventType,
-  RewardedAdEventType,
+  TestIds 
 } from 'react-native-google-mobile-ads';
 
-// ============================================================================
-// AD UNIT IDs - REPLACE WITH YOUR OWN FROM ADMOB!
-// ============================================================================
+// Use test IDs in development, real IDs in production
+const IS_DEV = __DEV__;
 
-// Use test IDs during development, real IDs in production
-const IS_TESTING = __DEV__;
-
-export const AD_UNITS = {
-  BANNER: IS_TESTING ? TestIds.BANNER : 'ca-app-pub-XXXXX/XXXXX', // Replace
-  INTERSTITIAL: IS_TESTING ? TestIds.INTERSTITIAL : 'ca-app-pub-XXXXX/XXXXX', // Replace
-  REWARDED: IS_TESTING ? TestIds.REWARDED : 'ca-app-pub-XXXXX/XXXXX', // Replace
+export const AD_IDS = {
+  banner: IS_DEV ? TestIds.BANNER : 'ca-app-pub-9254337095601557/8035819607',
+  interstitial: IS_DEV ? TestIds.INTERSTITIAL : 'ca-app-pub-9254337095601557/2775754061',
 };
 
-// ============================================================================
-// INTERSTITIAL AD (Show between games)
-// ============================================================================
+// Initialize ads
+let adsInitialized = false;
 
-let interstitialAd: InterstitialAd | null = null;
+export const initializeAds = async (): Promise<boolean> => {
+  if (adsInitialized) return true;
+  
+  try {
+    await mobileAds().initialize();
+    adsInitialized = true;
+    console.log('Ads initialized successfully');
+    return true;
+  } catch (error) {
+    console.error('Failed to initialize ads:', error);
+    return false;
+  }
+};
+
+// Interstitial ad instance
+let interstitial: InterstitialAd | null = null;
 let interstitialLoaded = false;
 
 export const loadInterstitial = () => {
-  interstitialAd = InterstitialAd.createForAdRequest(AD_UNITS.INTERSTITIAL, {
-    requestNonPersonalizedAdsOnly: true,
-  });
+  try {
+    interstitial = InterstitialAd.createForAdRequest(AD_IDS.interstitial, {
+      requestNonPersonalizedAdsOnly: true,
+    });
 
-  interstitialAd.addAdEventListener(AdEventType.LOADED, () => {
-    interstitialLoaded = true;
-    console.log('Interstitial ad loaded');
-  });
+    interstitial.addAdEventListener(AdEventType.LOADED, () => {
+      interstitialLoaded = true;
+    });
 
-  interstitialAd.addAdEventListener(AdEventType.CLOSED, () => {
-    interstitialLoaded = false;
-    loadInterstitial(); // Preload next ad
-  });
+    interstitial.addAdEventListener(AdEventType.CLOSED, () => {
+      interstitialLoaded = false;
+      // Reload for next time
+      loadInterstitial();
+    });
 
-  interstitialAd.load();
+    interstitial.addAdEventListener(AdEventType.ERROR, (error) => {
+      console.log('Interstitial error:', error);
+      interstitialLoaded = false;
+    });
+
+    interstitial.load();
+  } catch (error) {
+    console.error('Failed to load interstitial:', error);
+  }
 };
 
-export const showInterstitial = (): Promise<boolean> => {
-  return new Promise((resolve) => {
-    if (interstitialLoaded && interstitialAd) {
-      interstitialAd.show();
-      resolve(true);
-    } else {
-      resolve(false);
-    }
-  });
+export const showInterstitial = async (): Promise<boolean> => {
+  if (!interstitialLoaded || !interstitial) {
+    loadInterstitial();
+    return false;
+  }
+
+  try {
+    await interstitial.show();
+    return true;
+  } catch (error) {
+    console.error('Failed to show interstitial:', error);
+    return false;
+  }
 };
 
-// ============================================================================
-// REWARDED AD (Watch for bonus)
-// ============================================================================
-
-let rewardedAd: RewardedAd | null = null;
-let rewardedLoaded = false;
-
-export const loadRewarded = () => {
-  rewardedAd = RewardedAd.createForAdRequest(AD_UNITS.REWARDED, {
-    requestNonPersonalizedAdsOnly: true,
-  });
-
-  rewardedAd.addAdEventListener(RewardedAdEventType.LOADED, () => {
-    rewardedLoaded = true;
-    console.log('Rewarded ad loaded');
-  });
-
-  rewardedAd.addAdEventListener(RewardedAdEventType.EARNED_REWARD, (reward) => {
-    console.log('User earned reward:', reward);
-  });
-
-  rewardedAd.addAdEventListener(AdEventType.CLOSED, () => {
-    rewardedLoaded = false;
-    loadRewarded(); // Preload next ad
-  });
-
-  rewardedAd.load();
-};
-
-export const showRewarded = (): Promise<boolean> => {
-  return new Promise((resolve) => {
-    if (rewardedLoaded && rewardedAd) {
-      rewardedAd.addAdEventListener(RewardedAdEventType.EARNED_REWARD, () => {
-        resolve(true);
-      });
-      rewardedAd.addAdEventListener(AdEventType.CLOSED, () => {
-        resolve(false);
-      });
-      rewardedAd.show();
-    } else {
-      resolve(false);
-    }
-  });
-};
-
-// ============================================================================
-// INITIALIZE ADS
-// ============================================================================
-
-export const initializeAds = () => {
-  loadInterstitial();
-  loadRewarded();
-};
-
-// Export BannerAd component for use in JSX
 export { BannerAd, BannerAdSize };

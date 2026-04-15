@@ -15,7 +15,10 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.weblity.colormind",
-      "buildNumber": "22"
+      "buildNumber": "23",
+      "config": {
+        "googleMobileAdsAppId": "ca-app-pub-9254337095601557~3384473164"
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -23,13 +26,24 @@
         "backgroundColor": "#0a0a1a"
       },
       "package": "com.weblity.colormind",
-      "versionCode": 1
+      "versionCode": 1,
+      "config": {
+        "googleMobileAdsAppId": "ca-app-pub-9254337095601557~3384473164"
+      }
     },
     "web": {
       "favicon": "./assets/favicon.png",
       "bundler": "metro"
     },
-    "plugins": [],
+    "plugins": [
+      [
+        "react-native-google-mobile-ads",
+        {
+          "androidAppId": "ca-app-pub-9254337095601557~3384473164",
+          "iosAppId": "ca-app-pub-9254337095601557~3384473164"
+        }
+      ]
+    ],
     "extra": {
       "eas": {}
     }
