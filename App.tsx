@@ -10,8 +10,12 @@ import {
   Share,
   TextInput,
   Alert,
+  ActivityIndicator,
+  Platform,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import * as AppleAuthentication from 'expo-apple-authentication';
+import { supabase, Profile, Score } from './src/supabase';
 
 const { width } = Dimensions.get('window');
 const TRACK_WIDTH = width - 80;
@@ -27,7 +31,7 @@ interface HSBColor {
 }
 
 type GameMode = 'solo' | 'daily' | 'multiplayer';
-type GamePhase = 'menu' | 'multiplayer-menu' | 'create-room' | 'join-room' | 'memorize' | 'recall' | 'results';
+type Screen = 'loading' | 'auth' | 'username' | 'menu' | 'multiplayer-menu' | 'create-room' | 'join-room' | 'memorize' | 'recall' | 'results' | 'leaderboard';
 
 // ============================================================================
 // COLOR UTILITIES
@@ -68,6 +72,11 @@ const generateColors = (count: number): HSBColor[] => {
 const getDailySeed = (): number => {
   const today = new Date();
   return today.getFullYear() * 10000 + (today.getMonth() + 1) * 100 + today.getDate();
+};
+
+const getTodayString = (): string => {
+  const today = new Date();
+  return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
 };
 
 const generateRoomCode = (): string => {
@@ -196,29 +205,9 @@ const ColorPicker: React.FC<ColorPickerProps> = ({
       </View>
 
       <View style={styles.slidersCard}>
-        <Slider
-          label="Farbton"
-          value={hue}
-          max={360}
-          colors={HUE_GRADIENT as unknown as string[]}
-          onChange={onHueChange}
-        />
-        
-        <Slider
-          label="Sättigung"
-          value={saturation}
-          max={100}
-          colors={[satStart, satEnd]}
-          onChange={onSatChange}
-        />
-        
-        <Slider
-          label="Helligkeit"
-          value={brightness}
-          max={100}
-          colors={[briStart, briEnd]}
-          onChange={onBriChange}
-        />
+        <Slider label="Farbton" value={hue} max={360} colors={HUE_GRADIENT as unknown as string[]} onChange={onHueChange} />
+        <Slider label="Sättigung" value={saturation} max={100} colors={[satStart, satEnd]} onChange={onSatChange} />
+        <Slider label="Helligkeit" value={brightness} max={100} colors={[briStart, briEnd]} onChange={onBriChange} />
       </View>
     </View>
   );
@@ -255,24 +244,195 @@ const ModeButton: React.FC<{
 // ============================================================================
 
 export default function App() {
-  const [phase, setPhase] = useState<GamePhase>('menu');
+  // Auth state
+  const [screen, setScreen] = useState<Screen>('loading');
+  const [user, setUser] = useState<any>(null);
+  const [profile, setProfile] = useState<Profile | null>(null);
+  const [loading, setLoading] = useState(false);
+  
+  // Auth form
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [username, setUsername] = useState('');
+  const [isLogin, setIsLogin] = useState(true);
+  
+  // Game state
   const [mode, setMode] = useState<GameMode>('solo');
   const [roomCode, setRoomCode] = useState('');
   const [inputCode, setInputCode] = useState('');
   const [targets, setTargets] = useState<HSBColor[]>([]);
   const [guesses, setGuesses] = useState<HSBColor[]>([]);
   const [idx, setIdx] = useState(0);
-  
   const [guessH, setGuessH] = useState(180);
   const [guessS, setGuessS] = useState(50);
   const [guessB, setGuessB] = useState(75);
-  
   const [timer, setTimer] = useState(3);
   const [scores, setScores] = useState<number[]>([]);
   const [dailyPlayed, setDailyPlayed] = useState(false);
   const [dailyScore, setDailyScore] = useState<number | null>(null);
+  
+  // Leaderboard
+  const [leaderboard, setLeaderboard] = useState<Score[]>([]);
+  const [leaderboardMode, setLeaderboardMode] = useState<'daily' | 'alltime'>('daily');
 
   const N = 5;
+
+  // ============================================================================
+  // AUTH FUNCTIONS
+  // ============================================================================
+
+  useEffect(() => {
+    checkSession();
+    
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null);
+      if (session?.user) {
+        loadProfile(session.user.id);
+      }
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  const checkSession = async () => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.user) {
+        setUser(session.user);
+        await loadProfile(session.user.id);
+      } else {
+        setScreen('auth');
+      }
+    } catch (error) {
+      setScreen('auth');
+    }
+  };
+
+  const loadProfile = async (userId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', userId)
+        .single();
+      
+      if (data) {
+        setProfile(data);
+        await checkDailyPlayed(data.username);
+        setScreen('menu');
+      } else {
+        setScreen('username');
+      }
+    } catch (error) {
+      setScreen('username');
+    }
+  };
+
+  const checkDailyPlayed = async (uname: string) => {
+    try {
+      const { data } = await supabase
+        .from('scores')
+        .select('score')
+        .eq('username', uname)
+        .eq('mode', 'daily')
+        .eq('date', getTodayString())
+        .single();
+      
+      if (data) {
+        setDailyPlayed(true);
+        setDailyScore(data.score);
+      }
+    } catch {}
+  };
+
+  const signInWithEmail = async () => {
+    setLoading(true);
+    try {
+      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) Alert.alert('Fehler', error.message);
+    } catch (error: any) {
+      Alert.alert('Fehler', error.message);
+    }
+    setLoading(false);
+  };
+
+  const signUpWithEmail = async () => {
+    setLoading(true);
+    try {
+      const { error } = await supabase.auth.signUp({ email, password });
+      if (error) {
+        Alert.alert('Fehler', error.message);
+      } else {
+        Alert.alert('Erfolg', 'Check deine E-Mail für den Bestätigungslink!');
+      }
+    } catch (error: any) {
+      Alert.alert('Fehler', error.message);
+    }
+    setLoading(false);
+  };
+
+  const signInWithApple = async () => {
+    try {
+      const credential = await AppleAuthentication.signInAsync({
+        requestedScopes: [
+          AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
+          AppleAuthentication.AppleAuthenticationScope.EMAIL,
+        ],
+      });
+      
+      if (credential.identityToken) {
+        const { error } = await supabase.auth.signInWithIdToken({
+          provider: 'apple',
+          token: credential.identityToken,
+        });
+        if (error) Alert.alert('Fehler', error.message);
+      }
+    } catch (error: any) {
+      if (error.code !== 'ERR_CANCELED') {
+        Alert.alert('Fehler', error.message);
+      }
+    }
+  };
+
+  const saveUsername = async () => {
+    if (username.length < 3) {
+      Alert.alert('Fehler', 'Username muss mindestens 3 Zeichen haben');
+      return;
+    }
+    
+    setLoading(true);
+    try {
+      const { error } = await supabase.from('profiles').insert({
+        id: user.id,
+        username: username.toLowerCase(),
+      });
+      
+      if (error) {
+        if (error.code === '23505') {
+          Alert.alert('Fehler', 'Username bereits vergeben');
+        } else {
+          Alert.alert('Fehler', error.message);
+        }
+      } else {
+        setProfile({ id: user.id, username: username.toLowerCase(), created_at: new Date().toISOString() });
+        setScreen('menu');
+      }
+    } catch (error: any) {
+      Alert.alert('Fehler', error.message);
+    }
+    setLoading(false);
+  };
+
+  const signOut = async () => {
+    await supabase.auth.signOut();
+    setUser(null);
+    setProfile(null);
+    setScreen('auth');
+  };
+
+  // ============================================================================
+  // GAME FUNCTIONS
+  // ============================================================================
 
   const startGame = useCallback((gameMode: GameMode, seed?: number) => {
     let colors: HSBColor[];
@@ -294,13 +454,13 @@ export default function App() {
     setGuessB(75);
     setScores([]);
     setTimer(3);
-    setPhase('memorize');
+    setScreen('memorize');
   }, []);
 
   const createRoom = useCallback(() => {
     const code = generateRoomCode();
     setRoomCode(code);
-    setPhase('create-room');
+    setScreen('create-room');
   }, []);
 
   const joinRoom = useCallback(() => {
@@ -318,21 +478,17 @@ export default function App() {
     startGame('multiplayer', seed);
   }, [roomCode, startGame]);
 
-  const copyCode = useCallback(() => {
-    Alert.alert('Code', `Dein Code: ${roomCode}\n\nTeile ihn mit deinen Freunden!`);
-  }, [roomCode]);
-
   useEffect(() => {
-    if (phase !== 'memorize') return;
+    if (screen !== 'memorize') return;
     if (timer <= 0) {
-      setPhase('recall');
+      setScreen('recall');
       return;
     }
     const t = setTimeout(() => setTimer((v) => v - 1), 1000);
     return () => clearTimeout(t);
-  }, [phase, timer]);
+  }, [screen, timer]);
 
-  const submitGuess = useCallback(() => {
+  const submitGuess = useCallback(async () => {
     const currentGuess: HSBColor = { h: guessH, s: guessS, b: guessB };
     const newGuesses = [...guesses, currentGuess];
     setGuesses(newGuesses);
@@ -343,309 +499,345 @@ export default function App() {
       setGuessS(50);
       setGuessB(75);
       setTimer(3);
-      setPhase('memorize');
+      setScreen('memorize');
     } else {
       const sc = targets.map((t, i) => calculateScore(t, newGuesses[i]));
       setScores(sc);
+      const total = sc.reduce((a, b) => a + b, 0);
+      
+      // Save score to database
+      if (profile) {
+        try {
+          await supabase.from('scores').insert({
+            user_id: user.id,
+            username: profile.username,
+            score: total,
+            mode: mode,
+            date: mode === 'daily' ? getTodayString() : null,
+          });
+        } catch {}
+      }
       
       if (mode === 'daily') {
         setDailyPlayed(true);
-        setDailyScore(sc.reduce((a, b) => a + b, 0));
+        setDailyScore(total);
       }
       
-      setPhase('results');
+      setScreen('results');
     }
-  }, [guessH, guessS, guessB, guesses, idx, targets, mode]);
+  }, [guessH, guessS, guessB, guesses, idx, targets, mode, profile, user]);
 
   const totalScore = scores.reduce((a, b) => a + b, 0);
   const percentile = getPercentile(totalScore);
 
   const shareResults = async () => {
     const emoji = getEmoji(percentile);
-    let text = '';
-    
-    if (mode === 'multiplayer') {
-      text = `ColorMind Duell ${emoji}\nCode: ${roomCode}\nMein Score: ${totalScore.toFixed(1)}/50\n\nKannst du das schlagen?`;
-    } else if (mode === 'daily') {
-      text = `ColorMind Daily ${emoji}\n${totalScore.toFixed(1)}/50 • Top ${percentile}%`;
-    } else {
-      text = `ColorMind ${emoji}\n${totalScore.toFixed(1)}/50 • Top ${percentile}%`;
-    }
-    
+    let text = `ColorMind ${emoji}\n${totalScore.toFixed(1)}/50 • Top ${percentile}%\n\n@${profile?.username}`;
     try { await Share.share({ message: text }); } catch {}
   };
 
   const goToMenu = () => {
-    setPhase('menu');
+    setScreen('menu');
     setRoomCode('');
     setInputCode('');
   };
+
+  // ============================================================================
+  // LEADERBOARD
+  // ============================================================================
+
+  const loadLeaderboard = async (lbMode: 'daily' | 'alltime') => {
+    setLeaderboardMode(lbMode);
+    setScreen('leaderboard');
+    
+    try {
+      let query = supabase
+        .from('scores')
+        .select('*')
+        .order('score', { ascending: false })
+        .limit(50);
+      
+      if (lbMode === 'daily') {
+        query = query.eq('mode', 'daily').eq('date', getTodayString());
+      }
+      
+      const { data } = await query;
+      setLeaderboard(data || []);
+    } catch {}
+  };
+
+  // ============================================================================
+  // RENDER
+  // ============================================================================
 
   return (
     <View style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor="#0a0a1a" />
 
-      <View style={styles.header}>
-        <Text style={styles.logo}>
-          Color<Text style={styles.logoAccent}>Mind</Text>
-        </Text>
-        {phase !== 'menu' && (
-          <TouchableOpacity onPress={goToMenu} style={styles.closeBtn}>
-            <Text style={styles.closeBtnText}>✕</Text>
-          </TouchableOpacity>
-        )}
-      </View>
+      {/* LOADING */}
+      {screen === 'loading' && (
+        <View style={styles.centerContainer}>
+          <ActivityIndicator size="large" color="#2997ff" />
+        </View>
+      )}
 
-      <ScrollView 
-        style={styles.content} 
-        contentContainerStyle={styles.contentInner}
-        showsVerticalScrollIndicator={false}
-        keyboardShouldPersistTaps="handled"
-        scrollEnabled={phase !== 'recall'}
-      >
-        {/* MAIN MENU */}
-        {phase === 'menu' && (
-          <View style={styles.menuContainer}>
-            <Text style={styles.menuTitle}>
-              Wie gut ist dein{'\n'}Farbgedächtnis?
-            </Text>
-            
-            <View style={styles.modesContainer}>
-              <ModeButton
-                icon="🎯"
-                title="Solo"
-                subtitle="Übe alleine"
-                color="#2997ff"
-                onPress={() => startGame('solo')}
-              />
-              
-              <ModeButton
-                icon="📅"
-                title="Daily Challenge"
-                subtitle={dailyPlayed ? `Heute: ${dailyScore?.toFixed(1)}/50` : "Gleiche Farben für alle"}
-                color={dailyPlayed ? '#444' : '#00a67d'}
-                onPress={() => startGame('daily')}
-                disabled={dailyPlayed}
-              />
-              
-              <ModeButton
-                icon="👥"
-                title="Multiplayer"
-                subtitle="Fordere Freunde heraus"
-                color="#ff6b35"
-                onPress={() => setPhase('multiplayer-menu')}
-              />
-            </View>
-          </View>
-        )}
-
-        {/* MULTIPLAYER MENU */}
-        {phase === 'multiplayer-menu' && (
-          <View style={styles.menuContainer}>
-            <Text style={styles.menuTitle}>Multiplayer</Text>
-            <Text style={styles.menuSubtitle}>
-              Spielt die gleichen Farben und vergleicht eure Scores!
-            </Text>
-            
-            <View style={styles.modesContainer}>
-              <ModeButton
-                icon="➕"
-                title="Raum erstellen"
-                subtitle="Erstelle einen Code für Freunde"
-                color="#2997ff"
-                onPress={createRoom}
-              />
-              
-              <ModeButton
-                icon="🔗"
-                title="Raum beitreten"
-                subtitle="Gib einen Code ein"
-                color="#00a67d"
-                onPress={() => setPhase('join-room')}
-              />
-            </View>
-          </View>
-        )}
-
-        {/* CREATE ROOM */}
-        {phase === 'create-room' && (
-          <View style={styles.roomContainer}>
-            <Text style={styles.roomTitle}>Dein Raum-Code</Text>
-            
-            <View style={styles.codeDisplay}>
-              <Text style={styles.codeText}>{roomCode}</Text>
-            </View>
-            
-            <Text style={styles.roomHint}>
-              Teile diesen Code mit deinen Freunden.{'\n'}
-              Ihr spielt die gleichen Farben!
-            </Text>
-            
-            <TouchableOpacity style={styles.secondaryButton} onPress={copyCode}>
-              <Text style={styles.secondaryButtonText}>📋 Code anzeigen</Text>
-            </TouchableOpacity>
-            
-            <TouchableOpacity style={styles.primaryButton} onPress={startMultiplayerGame}>
-              <Text style={styles.primaryButtonText}>🎮 Spiel starten</Text>
-            </TouchableOpacity>
-          </View>
-        )}
-
-        {/* JOIN ROOM */}
-        {phase === 'join-room' && (
-          <View style={styles.roomContainer}>
-            <Text style={styles.roomTitle}>Code eingeben</Text>
-            
+      {/* AUTH SCREEN */}
+      {screen === 'auth' && (
+        <ScrollView style={styles.content} contentContainerStyle={styles.authContainer}>
+          <Text style={styles.logoLarge}>Color<Text style={styles.logoAccent}>Mind</Text></Text>
+          <Text style={styles.authSubtitle}>Teste dein Farbgedächtnis!</Text>
+          
+          <View style={styles.authCard}>
             <TextInput
-              style={styles.codeInput}
-              value={inputCode}
-              onChangeText={(text) => setInputCode(text.replace(/[^0-9]/g, '').slice(0, 4))}
-              placeholder="0000"
-              placeholderTextColor="rgba(255,255,255,0.3)"
-              keyboardType="number-pad"
-              maxLength={4}
-              textAlign="center"
+              style={styles.input}
+              placeholder="E-Mail"
+              placeholderTextColor="rgba(255,255,255,0.4)"
+              value={email}
+              onChangeText={setEmail}
+              keyboardType="email-address"
+              autoCapitalize="none"
             />
-            
-            <Text style={styles.roomHint}>
-              Gib den 4-stelligen Code ein,{'\n'}
-              den du von deinem Freund bekommen hast.
-            </Text>
+            <TextInput
+              style={styles.input}
+              placeholder="Passwort"
+              placeholderTextColor="rgba(255,255,255,0.4)"
+              value={password}
+              onChangeText={setPassword}
+              secureTextEntry
+            />
             
             <TouchableOpacity 
-              style={[styles.primaryButton, inputCode.length !== 4 && styles.disabledButton]} 
-              onPress={joinRoom}
-              disabled={inputCode.length !== 4}
+              style={styles.primaryButton} 
+              onPress={isLogin ? signInWithEmail : signUpWithEmail}
+              disabled={loading}
             >
-              <Text style={styles.primaryButtonText}>🎮 Beitreten</Text>
-            </TouchableOpacity>
-          </View>
-        )}
-
-        {/* MEMORIZE */}
-        {phase === 'memorize' && targets.length > 0 && targets[idx] && (
-          <View style={styles.gameContainer}>
-            {mode === 'multiplayer' && (
-              <View style={styles.badge}>
-                <Text style={styles.badgeText}>Code: {roomCode}</Text>
-              </View>
-            )}
-            
-            <View style={styles.progressRow}>
-              {Array.from({ length: N }).map((_, i) => (
-                <View
-                  key={i}
-                  style={[
-                    styles.progressDot,
-                    i < idx && styles.progressDotDone,
-                    i === idx && styles.progressDotActive,
-                  ]}
-                />
-              ))}
-            </View>
-            
-            <Text style={styles.phaseTitle}>Farbe {idx + 1} merken</Text>
-            <Text style={styles.timer}>{timer}</Text>
-            
-            <View 
-              style={[
-                styles.memorizeColor, 
-                { backgroundColor: hsbToHex(targets[idx].h, targets[idx].s, targets[idx].b) }
-              ]}
-            />
-            
-            <Text style={styles.hint}>Präge dir diese Farbe ein!</Text>
-          </View>
-        )}
-
-        {/* RECALL */}
-        {phase === 'recall' && (
-          <View style={styles.gameContainer}>
-            {mode === 'multiplayer' && (
-              <View style={styles.badge}>
-                <Text style={styles.badgeText}>Code: {roomCode}</Text>
-              </View>
-            )}
-            
-            <View style={styles.progressRow}>
-              {Array.from({ length: N }).map((_, i) => (
-                <View
-                  key={i}
-                  style={[
-                    styles.progressDot,
-                    i < idx && styles.progressDotDone,
-                    i === idx && styles.progressDotActive,
-                  ]}
-                />
-              ))}
-            </View>
-            
-            <Text style={styles.phaseTitle}>Farbe {idx + 1} nachbauen</Text>
-            
-            <ColorPicker
-              hue={guessH}
-              saturation={guessS}
-              brightness={guessB}
-              onHueChange={setGuessH}
-              onSatChange={setGuessS}
-              onBriChange={setGuessB}
-            />
-
-            <TouchableOpacity style={styles.primaryButton} onPress={submitGuess}>
               <Text style={styles.primaryButtonText}>
-                {idx < N - 1 ? 'Weiter →' : 'Ergebnis'}
+                {loading ? '...' : isLogin ? 'Anmelden' : 'Registrieren'}
+              </Text>
+            </TouchableOpacity>
+            
+            <TouchableOpacity onPress={() => setIsLogin(!isLogin)}>
+              <Text style={styles.switchText}>
+                {isLogin ? 'Noch kein Konto? Registrieren' : 'Schon ein Konto? Anmelden'}
               </Text>
             </TouchableOpacity>
           </View>
-        )}
+          
+          {Platform.OS === 'ios' && (
+            <AppleAuthentication.AppleAuthenticationButton
+              buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN}
+              buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.WHITE}
+              cornerRadius={24}
+              style={styles.appleButton}
+              onPress={signInWithApple}
+            />
+          )}
+        </ScrollView>
+      )}
 
-        {/* RESULTS */}
-        {phase === 'results' && (
-          <View style={styles.resultsContainer}>
-            {mode === 'multiplayer' && (
-              <View style={styles.badge}>
-                <Text style={styles.badgeText}>Duell • Code: {roomCode}</Text>
-              </View>
-            )}
-            {mode === 'daily' && (
-              <View style={styles.badge}>
-                <Text style={styles.badgeText}>📅 Daily Challenge</Text>
-              </View>
-            )}
+      {/* USERNAME SCREEN */}
+      {screen === 'username' && (
+        <View style={styles.centerContainer}>
+          <Text style={styles.menuTitle}>Wähle deinen Username</Text>
+          <TextInput
+            style={[styles.input, { width: width - 80 }]}
+            placeholder="username"
+            placeholderTextColor="rgba(255,255,255,0.4)"
+            value={username}
+            onChangeText={(t) => setUsername(t.replace(/[^a-zA-Z0-9_]/g, '').slice(0, 15))}
+            autoCapitalize="none"
+            maxLength={15}
+          />
+          <TouchableOpacity style={styles.primaryButton} onPress={saveUsername} disabled={loading}>
+            <Text style={styles.primaryButtonText}>{loading ? '...' : 'Speichern'}</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {/* HEADER (for game screens) */}
+      {!['loading', 'auth', 'username'].includes(screen) && (
+        <View style={styles.header}>
+          <Text style={styles.logo}>Color<Text style={styles.logoAccent}>Mind</Text></Text>
+          {screen !== 'menu' ? (
+            <TouchableOpacity onPress={goToMenu} style={styles.closeBtn}>
+              <Text style={styles.closeBtnText}>✕</Text>
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity onPress={signOut}>
+              <Text style={styles.usernameText}>@{profile?.username}</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      )}
+
+      {/* MAIN MENU */}
+      {screen === 'menu' && (
+        <ScrollView style={styles.content} contentContainerStyle={styles.contentInner}>
+          <View style={styles.menuContainer}>
+            <Text style={styles.menuTitle}>Wie gut ist dein{'\n'}Farbgedächtnis?</Text>
             
+            <View style={styles.modesContainer}>
+              <ModeButton icon="🎯" title="Solo" subtitle="Übe alleine" color="#2997ff" onPress={() => startGame('solo')} />
+              <ModeButton 
+                icon="📅" 
+                title="Daily Challenge" 
+                subtitle={dailyPlayed ? `Heute: ${dailyScore?.toFixed(1)}/50` : "Gleiche Farben für alle"} 
+                color={dailyPlayed ? '#444' : '#00a67d'} 
+                onPress={() => startGame('daily')} 
+                disabled={dailyPlayed} 
+              />
+              <ModeButton icon="👥" title="Multiplayer" subtitle="Fordere Freunde heraus" color="#ff6b35" onPress={() => setScreen('multiplayer-menu')} />
+              <ModeButton icon="🏆" title="Leaderboard" subtitle="Top Spieler" color="#8b5cf6" onPress={() => loadLeaderboard('daily')} />
+            </View>
+          </View>
+        </ScrollView>
+      )}
+
+      {/* MULTIPLAYER MENU */}
+      {screen === 'multiplayer-menu' && (
+        <ScrollView style={styles.content} contentContainerStyle={styles.contentInner}>
+          <View style={styles.menuContainer}>
+            <Text style={styles.menuTitle}>Multiplayer</Text>
+            <Text style={styles.menuSubtitle}>Spielt die gleichen Farben!</Text>
+            <View style={styles.modesContainer}>
+              <ModeButton icon="➕" title="Raum erstellen" subtitle="Code für Freunde" color="#2997ff" onPress={createRoom} />
+              <ModeButton icon="🔗" title="Raum beitreten" subtitle="Code eingeben" color="#00a67d" onPress={() => setScreen('join-room')} />
+            </View>
+          </View>
+        </ScrollView>
+      )}
+
+      {/* CREATE ROOM */}
+      {screen === 'create-room' && (
+        <View style={styles.centerContainer}>
+          <Text style={styles.roomTitle}>Dein Code</Text>
+          <View style={styles.codeDisplay}><Text style={styles.codeText}>{roomCode}</Text></View>
+          <Text style={styles.roomHint}>Teile den Code mit Freunden!</Text>
+          <TouchableOpacity style={styles.primaryButton} onPress={startMultiplayerGame}>
+            <Text style={styles.primaryButtonText}>🎮 Starten</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {/* JOIN ROOM */}
+      {screen === 'join-room' && (
+        <View style={styles.centerContainer}>
+          <Text style={styles.roomTitle}>Code eingeben</Text>
+          <TextInput
+            style={styles.codeInput}
+            value={inputCode}
+            onChangeText={(t) => setInputCode(t.replace(/[^0-9]/g, '').slice(0, 4))}
+            placeholder="0000"
+            placeholderTextColor="rgba(255,255,255,0.3)"
+            keyboardType="number-pad"
+            maxLength={4}
+            textAlign="center"
+          />
+          <TouchableOpacity 
+            style={[styles.primaryButton, inputCode.length !== 4 && styles.disabledButton]} 
+            onPress={joinRoom} 
+            disabled={inputCode.length !== 4}
+          >
+            <Text style={styles.primaryButtonText}>🎮 Beitreten</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {/* MEMORIZE */}
+      {screen === 'memorize' && targets[idx] && (
+        <View style={styles.gameContainer}>
+          <View style={styles.progressRow}>
+            {Array.from({ length: N }).map((_, i) => (
+              <View key={i} style={[styles.progressDot, i < idx && styles.progressDotDone, i === idx && styles.progressDotActive]} />
+            ))}
+          </View>
+          <Text style={styles.phaseTitle}>Farbe {idx + 1} merken</Text>
+          <Text style={styles.timer}>{timer}</Text>
+          <View style={[styles.memorizeColor, { backgroundColor: hsbToHex(targets[idx].h, targets[idx].s, targets[idx].b) }]} />
+          <Text style={styles.hint}>Präge dir diese Farbe ein!</Text>
+        </View>
+      )}
+
+      {/* RECALL */}
+      {screen === 'recall' && (
+        <ScrollView style={styles.content} contentContainerStyle={styles.contentInner} scrollEnabled={false}>
+          <View style={styles.gameContainer}>
+            <View style={styles.progressRow}>
+              {Array.from({ length: N }).map((_, i) => (
+                <View key={i} style={[styles.progressDot, i < idx && styles.progressDotDone, i === idx && styles.progressDotActive]} />
+              ))}
+            </View>
+            <Text style={styles.phaseTitle}>Farbe {idx + 1} nachbauen</Text>
+            <ColorPicker hue={guessH} saturation={guessS} brightness={guessB} onHueChange={setGuessH} onSatChange={setGuessS} onBriChange={setGuessB} />
+            <TouchableOpacity style={styles.primaryButton} onPress={submitGuess}>
+              <Text style={styles.primaryButtonText}>{idx < N - 1 ? 'Weiter →' : 'Ergebnis'}</Text>
+            </TouchableOpacity>
+          </View>
+        </ScrollView>
+      )}
+
+      {/* RESULTS */}
+      {screen === 'results' && (
+        <ScrollView style={styles.content} contentContainerStyle={styles.contentInner}>
+          <View style={styles.resultsContainer}>
             <Text style={styles.resultsEmoji}>{getEmoji(percentile)}</Text>
             <Text style={styles.totalScore}>{totalScore.toFixed(1)}</Text>
             <Text style={styles.totalScoreLabel}>von 50 Punkten</Text>
+            <View style={styles.percentileBadge}><Text style={styles.percentileText}>Top {percentile}%</Text></View>
             
-            <View style={styles.percentileBadge}>
-              <Text style={styles.percentileText}>Top {percentile}%</Text>
-            </View>
-
             <View style={styles.resultsCard}>
               {targets.map((target, i) => (
                 <View key={i} style={styles.resultRow}>
-                  <View 
-                    style={[styles.resultColor, { backgroundColor: hsbToHex(target.h, target.s, target.b) }]} 
-                  />
+                  <View style={[styles.resultColor, { backgroundColor: hsbToHex(target.h, target.s, target.b) }]} />
                   <Text style={styles.resultArrow}>→</Text>
-                  <View 
-                    style={[styles.resultColor, { backgroundColor: hsbToHex(guesses[i]?.h || 0, guesses[i]?.s || 0, guesses[i]?.b || 0) }]} 
-                  />
+                  <View style={[styles.resultColor, { backgroundColor: hsbToHex(guesses[i]?.h || 0, guesses[i]?.s || 0, guesses[i]?.b || 0) }]} />
                   <Text style={styles.resultScore}>{scores[i]?.toFixed(1)}</Text>
                 </View>
               ))}
             </View>
-
+            
             <TouchableOpacity style={styles.secondaryButton} onPress={shareResults}>
               <Text style={styles.secondaryButtonText}>📤 Teilen</Text>
             </TouchableOpacity>
-
             <TouchableOpacity style={styles.primaryButton} onPress={goToMenu}>
-              <Text style={styles.primaryButtonText}>Zurück zum Menü</Text>
+              <Text style={styles.primaryButtonText}>Zurück</Text>
             </TouchableOpacity>
           </View>
-        )}
-      </ScrollView>
+        </ScrollView>
+      )}
+
+      {/* LEADERBOARD */}
+      {screen === 'leaderboard' && (
+        <ScrollView style={styles.content} contentContainerStyle={styles.contentInner}>
+          <View style={styles.lbHeader}>
+            <TouchableOpacity 
+              style={[styles.lbTab, leaderboardMode === 'daily' && styles.lbTabActive]} 
+              onPress={() => loadLeaderboard('daily')}
+            >
+              <Text style={styles.lbTabText}>📅 Heute</Text>
+            </TouchableOpacity>
+            <TouchableOpacity 
+              style={[styles.lbTab, leaderboardMode === 'alltime' && styles.lbTabActive]} 
+              onPress={() => loadLeaderboard('alltime')}
+            >
+              <Text style={styles.lbTabText}>🏆 Alle</Text>
+            </TouchableOpacity>
+          </View>
+          
+          <View style={styles.lbList}>
+            {leaderboard.map((entry, i) => (
+              <View key={entry.id} style={[styles.lbRow, entry.username === profile?.username && styles.lbRowMe]}>
+                <Text style={styles.lbRank}>{i + 1}</Text>
+                <Text style={styles.lbName}>@{entry.username}</Text>
+                <Text style={styles.lbScore}>{entry.score.toFixed(1)}</Text>
+              </View>
+            ))}
+            {leaderboard.length === 0 && (
+              <Text style={styles.lbEmpty}>Noch keine Scores heute!</Text>
+            )}
+          </View>
+        </ScrollView>
+      )}
     </View>
   );
 }
@@ -656,211 +848,98 @@ export default function App() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#0a0a1a' },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingTop: 60,
-    paddingHorizontal: 24,
-    paddingBottom: 16,
-  },
+  centerContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24 },
+  content: { flex: 1 },
+  contentInner: { paddingHorizontal: 24, paddingBottom: 50 },
+  
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingTop: 60, paddingHorizontal: 24, paddingBottom: 16 },
   logo: { fontSize: 28, fontWeight: '800', color: '#fff' },
+  logoLarge: { fontSize: 42, fontWeight: '800', color: '#fff', marginBottom: 8 },
   logoAccent: { color: '#2997ff' },
   closeBtn: { padding: 8 },
   closeBtnText: { fontSize: 24, color: 'rgba(255,255,255,0.5)' },
-  content: { flex: 1 },
-  contentInner: { paddingHorizontal: 24, paddingBottom: 50 },
+  usernameText: { fontSize: 14, color: '#2997ff', fontWeight: '600' },
 
+  // Auth
+  authContainer: { flexGrow: 1, justifyContent: 'center', alignItems: 'center', padding: 24 },
+  authSubtitle: { fontSize: 16, color: 'rgba(255,255,255,0.5)', marginBottom: 40 },
+  authCard: { width: '100%', backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: 20, padding: 20 },
+  input: { backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 12, padding: 16, fontSize: 16, color: '#fff', marginBottom: 12 },
+  switchText: { color: '#2997ff', textAlign: 'center', marginTop: 16, fontSize: 14 },
+  appleButton: { width: width - 48, height: 50, marginTop: 20 },
+
+  // Menu
   menuContainer: { alignItems: 'center', paddingTop: 30 },
-  menuTitle: {
-    fontSize: 28,
-    fontWeight: '800',
-    color: '#fff',
-    textAlign: 'center',
-    lineHeight: 36,
-  },
-  menuSubtitle: {
-    fontSize: 15,
-    color: 'rgba(255,255,255,0.5)',
-    textAlign: 'center',
-    marginTop: 8,
-  },
+  menuTitle: { fontSize: 28, fontWeight: '800', color: '#fff', textAlign: 'center', lineHeight: 36 },
+  menuSubtitle: { fontSize: 15, color: 'rgba(255,255,255,0.5)', textAlign: 'center', marginTop: 8 },
   modesContainer: { width: '100%', marginTop: 30, gap: 12 },
-  modeButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 20,
-    borderRadius: 16,
-  },
+  modeButton: { flexDirection: 'row', alignItems: 'center', padding: 20, borderRadius: 16 },
   modeIcon: { fontSize: 28, marginRight: 16 },
   modeText: { flex: 1 },
   modeTitle: { fontSize: 18, fontWeight: '700', color: '#fff' },
   modeSubtitle: { fontSize: 13, color: 'rgba(255,255,255,0.7)', marginTop: 2 },
   disabledButton: { opacity: 0.5 },
 
-  roomContainer: { alignItems: 'center', paddingTop: 40 },
+  // Room
   roomTitle: { fontSize: 24, fontWeight: '800', color: '#fff', marginBottom: 24 },
-  codeDisplay: {
-    backgroundColor: 'rgba(41,151,255,0.2)',
-    borderRadius: 16,
-    paddingVertical: 20,
-    paddingHorizontal: 40,
-    marginBottom: 16,
-  },
+  codeDisplay: { backgroundColor: 'rgba(41,151,255,0.2)', borderRadius: 16, paddingVertical: 20, paddingHorizontal: 40, marginBottom: 16 },
   codeText: { fontSize: 40, fontWeight: '800', color: '#2997ff', letterSpacing: 8 },
-  codeInput: {
-    backgroundColor: 'rgba(255,255,255,0.1)',
-    borderRadius: 16,
-    paddingVertical: 16,
-    paddingHorizontal: 32,
-    fontSize: 32,
-    fontWeight: '800',
-    color: '#fff',
-    letterSpacing: 8,
-    marginBottom: 16,
-    minWidth: 180,
-  },
-  roomHint: {
-    fontSize: 14,
-    color: 'rgba(255,255,255,0.5)',
-    textAlign: 'center',
-    marginBottom: 24,
-    lineHeight: 20,
-  },
+  codeInput: { backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 16, paddingVertical: 16, paddingHorizontal: 32, fontSize: 32, fontWeight: '800', color: '#fff', letterSpacing: 8, marginBottom: 16, minWidth: 180 },
+  roomHint: { fontSize: 14, color: 'rgba(255,255,255,0.5)', marginBottom: 24 },
 
-  primaryButton: {
-    backgroundColor: '#2997ff',
-    paddingVertical: 16,
-    paddingHorizontal: 32,
-    borderRadius: 24,
-    marginTop: 8,
-    minWidth: 200,
-    alignItems: 'center',
-  },
+  // Buttons
+  primaryButton: { backgroundColor: '#2997ff', paddingVertical: 16, paddingHorizontal: 32, borderRadius: 24, marginTop: 8, minWidth: 200, alignItems: 'center' },
   primaryButtonText: { fontSize: 17, fontWeight: '700', color: '#fff' },
-  secondaryButton: {
-    backgroundColor: 'rgba(255,255,255,0.1)',
-    paddingVertical: 14,
-    paddingHorizontal: 24,
-    borderRadius: 24,
-    marginBottom: 8,
-    width: '100%',
-    alignItems: 'center',
-  },
+  secondaryButton: { backgroundColor: 'rgba(255,255,255,0.1)', paddingVertical: 14, paddingHorizontal: 24, borderRadius: 24, marginBottom: 8, width: '100%', alignItems: 'center' },
   secondaryButtonText: { fontSize: 16, fontWeight: '600', color: '#fff' },
 
-  badge: {
-    backgroundColor: 'rgba(255,255,255,0.1)',
-    paddingVertical: 6,
-    paddingHorizontal: 14,
-    borderRadius: 16,
-    marginBottom: 12,
-  },
-  badgeText: { fontSize: 13, fontWeight: '600', color: 'rgba(255,255,255,0.7)' },
-
-  gameContainer: { alignItems: 'center', paddingTop: 10 },
+  // Game
+  gameContainer: { flex: 1, alignItems: 'center', paddingTop: 80 },
   progressRow: { flexDirection: 'row', gap: 8, marginBottom: 12 },
-  progressDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: 'rgba(255,255,255,0.2)',
-  },
+  progressDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: 'rgba(255,255,255,0.2)' },
   progressDotDone: { backgroundColor: '#00d4aa' },
   progressDotActive: { backgroundColor: '#2997ff', width: 20 },
   phaseTitle: { fontSize: 16, color: 'rgba(255,255,255,0.6)', marginBottom: 8 },
   timer: { fontSize: 72, fontWeight: '800', color: '#2997ff' },
-  memorizeColor: {
-    width: width * 0.5,
-    height: width * 0.5,
-    borderRadius: 24,
-    marginVertical: 24,
-  },
+  memorizeColor: { width: width * 0.5, height: width * 0.5, borderRadius: 24, marginVertical: 24 },
   hint: { fontSize: 14, color: 'rgba(255,255,255,0.4)' },
 
+  // Picker
   pickerContainer: { width: '100%', marginVertical: 12 },
   previewContainer: { alignItems: 'center', marginBottom: 16 },
   colorPreview: { width: 80, height: 80, borderRadius: 20 },
-  slidersCard: {
-    backgroundColor: 'rgba(255,255,255,0.05)',
-    borderRadius: 20,
-    padding: 16,
-  },
-
+  slidersCard: { backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: 20, padding: 16 },
   sliderContainer: { marginBottom: 20 },
-  sliderHeader: { 
-    flexDirection: 'row', 
-    justifyContent: 'space-between', 
-    marginBottom: 12,
-  },
-  sliderLabel: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: 'rgba(255,255,255,0.5)',
-    textTransform: 'uppercase',
-  },
-  sliderValue: { 
-    fontSize: 12, 
-    fontWeight: '600', 
-    color: 'rgba(255,255,255,0.7)' 
-  },
-  sliderTrack: {
-    height: 36,
-    borderRadius: 18,
-    position: 'relative',
-    overflow: 'hidden',
-  },
-  gradient: {
-    flex: 1,
-    borderRadius: 18,
-  },
-  thumb: {
-    position: 'absolute',
-    top: 4,
-    width: 28,
-    height: 28,
-    backgroundColor: '#fff',
-    borderRadius: 14,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-    elevation: 5,
-  },
+  sliderHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 12 },
+  sliderLabel: { fontSize: 12, fontWeight: '600', color: 'rgba(255,255,255,0.5)', textTransform: 'uppercase' },
+  sliderValue: { fontSize: 12, fontWeight: '600', color: 'rgba(255,255,255,0.7)' },
+  sliderTrack: { height: 36, borderRadius: 18, position: 'relative', overflow: 'hidden' },
+  gradient: { flex: 1, borderRadius: 18 },
+  thumb: { position: 'absolute', top: 4, width: 28, height: 28, backgroundColor: '#fff', borderRadius: 14, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 4, elevation: 5 },
 
-  resultsContainer: { alignItems: 'center', paddingTop: 10 },
+  // Results
+  resultsContainer: { alignItems: 'center', paddingTop: 30 },
   resultsEmoji: { fontSize: 56 },
   totalScore: { fontSize: 64, fontWeight: '800', color: '#fff' },
   totalScoreLabel: { fontSize: 16, color: 'rgba(255,255,255,0.4)' },
-  percentileBadge: { 
-    backgroundColor: 'rgba(41,151,255,0.2)',
-    paddingVertical: 10, 
-    paddingHorizontal: 20, 
-    borderRadius: 20, 
-    marginVertical: 12,
-  },
+  percentileBadge: { backgroundColor: 'rgba(41,151,255,0.2)', paddingVertical: 10, paddingHorizontal: 20, borderRadius: 20, marginVertical: 12 },
   percentileText: { fontSize: 15, fontWeight: '600', color: '#2997ff' },
-  resultsCard: {
-    width: '100%',
-    backgroundColor: 'rgba(255,255,255,0.05)',
-    borderRadius: 16,
-    padding: 12,
-    marginBottom: 12,
-  },
-  resultRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 8,
-    gap: 10,
-  },
+  resultsCard: { width: '100%', backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: 16, padding: 12, marginBottom: 12 },
+  resultRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 8, gap: 10 },
   resultColor: { width: 36, height: 36, borderRadius: 10 },
   resultArrow: { fontSize: 14, color: 'rgba(255,255,255,0.3)' },
-  resultScore: { 
-    fontSize: 16, 
-    fontWeight: '700', 
-    color: '#2997ff', 
-    width: 40, 
-    textAlign: 'right' 
-  },
+  resultScore: { fontSize: 16, fontWeight: '700', color: '#2997ff', width: 40, textAlign: 'right' },
+
+  // Leaderboard
+  lbHeader: { flexDirection: 'row', gap: 12, marginTop: 20, marginBottom: 20 },
+  lbTab: { flex: 1, backgroundColor: 'rgba(255,255,255,0.1)', paddingVertical: 12, borderRadius: 12, alignItems: 'center' },
+  lbTabActive: { backgroundColor: '#2997ff' },
+  lbTabText: { color: '#fff', fontWeight: '600', fontSize: 15 },
+  lbList: { gap: 8 },
+  lbRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.05)', padding: 16, borderRadius: 12 },
+  lbRowMe: { backgroundColor: 'rgba(41,151,255,0.2)' },
+  lbRank: { fontSize: 18, fontWeight: '800', color: '#2997ff', width: 40 },
+  lbName: { flex: 1, fontSize: 16, color: '#fff', fontWeight: '500' },
+  lbScore: { fontSize: 18, fontWeight: '700', color: '#2997ff' },
+  lbEmpty: { color: 'rgba(255,255,255,0.5)', textAlign: 'center', marginTop: 40 },
 });
