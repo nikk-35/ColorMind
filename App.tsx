@@ -10,13 +10,9 @@ import {
   Share,
   TextInput,
   Alert,
-  PanResponder,
-  GestureResponderEvent,
 } from 'react-native';
 
 const { width } = Dimensions.get('window');
-const SLIDER_PADDING = 50;
-const SLIDER_WIDTH = width - SLIDER_PADDING * 2 - 48;
 
 // ============================================================================
 // TYPES
@@ -109,84 +105,24 @@ const getEmoji = (p: number): string => {
 };
 
 // ============================================================================
-// DRAGGABLE SLIDER
-// ============================================================================
-
-interface SliderProps {
-  label: string;
-  value: number;
-  max: number;
-  colors: string[];
-  onChange: (value: number) => void;
-}
-
-const DraggableSlider: React.FC<SliderProps> = ({ label, value, max, colors, onChange }) => {
-  const trackRef = useRef<View>(null);
-  const trackX = useRef(0);
-  
-  const handleTouch = useCallback((pageX: number) => {
-    const x = pageX - trackX.current;
-    const percentage = Math.max(0, Math.min(1, x / SLIDER_WIDTH));
-    const newValue = Math.round(percentage * max);
-    onChange(newValue);
-  }, [max, onChange]);
-
-  const panResponder = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: () => true,
-      onPanResponderGrant: (evt) => {
-        handleTouch(evt.nativeEvent.pageX);
-      },
-      onPanResponderMove: (evt) => {
-        handleTouch(evt.nativeEvent.pageX);
-      },
-    })
-  ).current;
-
-  const onLayout = useCallback(() => {
-    trackRef.current?.measureInWindow((x) => {
-      trackX.current = x;
-    });
-  }, []);
-
-  const thumbLeft = (value / max) * SLIDER_WIDTH;
-
-  return (
-    <View style={styles.sliderContainer}>
-      <View style={styles.sliderHeader}>
-        <Text style={styles.sliderLabel}>{label}</Text>
-        <Text style={styles.sliderValue}>{value}{max === 360 ? '°' : '%'}</Text>
-      </View>
-      
-      <View 
-        ref={trackRef}
-        style={styles.sliderTrack}
-        onLayout={onLayout}
-        {...panResponder.panHandlers}
-      >
-        <View style={styles.gradientContainer}>
-          {colors.map((color, i) => (
-            <View key={i} style={[styles.gradientSegment, { backgroundColor: color }]} />
-          ))}
-        </View>
-        
-        <View style={[styles.thumb, { left: thumbLeft }]} />
-      </View>
-    </View>
-  );
-};
-
-// ============================================================================
-// COLOR PICKER
+// COLOR PICKER - Direct state management, no closures
 // ============================================================================
 
 interface ColorPickerProps {
-  value: HSBColor;
-  onChange: (color: HSBColor) => void;
+  hue: number;
+  saturation: number;
+  brightness: number;
+  onHueChange: (v: number) => void;
+  onSatChange: (v: number) => void;
+  onBriChange: (v: number) => void;
 }
 
-const ColorPicker: React.FC<ColorPickerProps> = ({ value, onChange }) => {
+const TRACK_WIDTH = width - 80;
+
+const ColorPicker: React.FC<ColorPickerProps> = ({
+  hue, saturation, brightness,
+  onHueChange, onSatChange, onBriChange
+}) => {
   const hueColors = [
     '#ff0000', '#ff8000', '#ffff00', '#80ff00',
     '#00ff00', '#00ff80', '#00ffff', '#0080ff',
@@ -194,65 +130,95 @@ const ColorPicker: React.FC<ColorPickerProps> = ({ value, onChange }) => {
   ];
   
   const satColors = [
-    hsbToHex(value.h, 0, value.b),
-    hsbToHex(value.h, 25, value.b),
-    hsbToHex(value.h, 50, value.b),
-    hsbToHex(value.h, 75, value.b),
-    hsbToHex(value.h, 100, value.b),
+    hsbToHex(hue, 0, brightness),
+    hsbToHex(hue, 25, brightness),
+    hsbToHex(hue, 50, brightness),
+    hsbToHex(hue, 75, brightness),
+    hsbToHex(hue, 100, brightness),
   ];
   
   const briColors = [
-    hsbToHex(value.h, value.s, 0),
-    hsbToHex(value.h, value.s, 25),
-    hsbToHex(value.h, value.s, 50),
-    hsbToHex(value.h, value.s, 75),
-    hsbToHex(value.h, value.s, 100),
+    hsbToHex(hue, saturation, 0),
+    hsbToHex(hue, saturation, 25),
+    hsbToHex(hue, saturation, 50),
+    hsbToHex(hue, saturation, 75),
+    hsbToHex(hue, saturation, 100),
   ];
 
-  const handleHueChange = useCallback((h: number) => {
-    onChange({ ...value, h });
-  }, [value, onChange]);
-
-  const handleSatChange = useCallback((s: number) => {
-    onChange({ ...value, s });
-  }, [value, onChange]);
-
-  const handleBriChange = useCallback((b: number) => {
-    onChange({ ...value, b });
-  }, [value, onChange]);
+  const handleSliderTouch = (e: any, max: number, setter: (v: number) => void) => {
+    const x = e.nativeEvent.locationX;
+    const percentage = Math.max(0, Math.min(1, x / TRACK_WIDTH));
+    setter(Math.round(percentage * max));
+  };
 
   return (
     <View style={styles.pickerContainer}>
       <View style={styles.previewContainer}>
         <View 
-          style={[styles.colorPreview, { backgroundColor: hsbToHex(value.h, value.s, value.b) }]}
+          style={[styles.colorPreview, { backgroundColor: hsbToHex(hue, saturation, brightness) }]}
         />
       </View>
 
       <View style={styles.slidersCard}>
-        <DraggableSlider
-          label="Farbton"
-          value={value.h}
-          max={360}
-          colors={hueColors}
-          onChange={handleHueChange}
-        />
-        
-        <DraggableSlider
-          label="Sättigung"
-          value={value.s}
-          max={100}
-          colors={satColors}
-          onChange={handleSatChange}
-        />
-        
-        <DraggableSlider
-          label="Helligkeit"
-          value={value.b}
-          max={100}
-          colors={briColors}
-          onChange={handleBriChange}
-        />
+        {/* HUE */}
+        <View style={styles.sliderContainer}>
+          <View style={styles.sliderHeader}>
+            <Text style={styles.sliderLabel}>Farbton</Text>
+            <Text style={styles.sliderValue}>{hue}°</Text>
+          </View>
+          <View 
+            style={styles.sliderTrack}
+            onStartShouldSetResponder={() => true}
+            onMoveShouldSetResponder={() => true}
+            onResponderGrant={(e) => handleSliderTouch(e, 360, onHueChange)}
+            onResponderMove={(e) => handleSliderTouch(e, 360, onHueChange)}
+          >
+            <View style={styles.gradientContainer}>
+              {hueColors.map((c, i) => <View key={i} style={[styles.gradientSegment, { backgroundColor: c }]} />)}
+            </View>
+            <View style={[styles.thumb, { left: (hue / 360) * TRACK_WIDTH - 14 }]} />
+          </View>
+        </View>
+
+        {/* SATURATION */}
+        <View style={styles.sliderContainer}>
+          <View style={styles.sliderHeader}>
+            <Text style={styles.sliderLabel}>Sättigung</Text>
+            <Text style={styles.sliderValue}>{saturation}%</Text>
+          </View>
+          <View 
+            style={styles.sliderTrack}
+            onStartShouldSetResponder={() => true}
+            onMoveShouldSetResponder={() => true}
+            onResponderGrant={(e) => handleSliderTouch(e, 100, onSatChange)}
+            onResponderMove={(e) => handleSliderTouch(e, 100, onSatChange)}
+          >
+            <View style={styles.gradientContainer}>
+              {satColors.map((c, i) => <View key={i} style={[styles.gradientSegment, { backgroundColor: c }]} />)}
+            </View>
+            <View style={[styles.thumb, { left: (saturation / 100) * TRACK_WIDTH - 14 }]} />
+          </View>
+        </View>
+
+        {/* BRIGHTNESS */}
+        <View style={styles.sliderContainer}>
+          <View style={styles.sliderHeader}>
+            <Text style={styles.sliderLabel}>Helligkeit</Text>
+            <Text style={styles.sliderValue}>{brightness}%</Text>
+          </View>
+          <View 
+            style={styles.sliderTrack}
+            onStartShouldSetResponder={() => true}
+            onMoveShouldSetResponder={() => true}
+            onResponderGrant={(e) => handleSliderTouch(e, 100, onBriChange)}
+            onResponderMove={(e) => handleSliderTouch(e, 100, onBriChange)}
+          >
+            <View style={styles.gradientContainer}>
+              {briColors.map((c, i) => <View key={i} style={[styles.gradientSegment, { backgroundColor: c }]} />)}
+            </View>
+            <View style={[styles.thumb, { left: (brightness / 100) * TRACK_WIDTH - 14 }]} />
+          </View>
+        </View>
       </View>
     </View>
   );
@@ -296,7 +262,12 @@ export default function App() {
   const [targets, setTargets] = useState<HSBColor[]>([]);
   const [guesses, setGuesses] = useState<HSBColor[]>([]);
   const [idx, setIdx] = useState(0);
-  const [guess, setGuess] = useState<HSBColor>({ h: 180, s: 50, b: 75 });
+  
+  // Separate state for each slider value
+  const [guessH, setGuessH] = useState(180);
+  const [guessS, setGuessS] = useState(50);
+  const [guessB, setGuessB] = useState(75);
+  
   const [timer, setTimer] = useState(3);
   const [scores, setScores] = useState<number[]>([]);
   const [dailyPlayed, setDailyPlayed] = useState(false);
@@ -319,7 +290,9 @@ export default function App() {
     setTargets(colors);
     setGuesses([]);
     setIdx(0);
-    setGuess({ h: 180, s: 50, b: 75 });
+    setGuessH(180);
+    setGuessS(50);
+    setGuessB(75);
     setScores([]);
     setTimer(3);
     setPhase('memorize');
@@ -360,17 +333,16 @@ export default function App() {
     return () => clearTimeout(t);
   }, [phase, timer]);
 
-  const handleGuessChange = useCallback((newGuess: HSBColor) => {
-    setGuess(newGuess);
-  }, []);
-
   const submitGuess = useCallback(() => {
-    const newGuesses = [...guesses, guess];
+    const currentGuess: HSBColor = { h: guessH, s: guessS, b: guessB };
+    const newGuesses = [...guesses, currentGuess];
     setGuesses(newGuesses);
 
     if (idx < N - 1) {
       setIdx((i) => i + 1);
-      setGuess({ h: 180, s: 50, b: 75 });
+      setGuessH(180);
+      setGuessS(50);
+      setGuessB(75);
       setTimer(3);
       setPhase('memorize');
     } else {
@@ -384,7 +356,7 @@ export default function App() {
       
       setPhase('results');
     }
-  }, [guess, guesses, idx, targets, mode]);
+  }, [guessH, guessS, guessB, guesses, idx, targets, mode]);
 
   const totalScore = scores.reduce((a, b) => a + b, 0);
   const percentile = getPercentile(totalScore);
@@ -611,7 +583,14 @@ export default function App() {
             
             <Text style={styles.phaseTitle}>Farbe {idx + 1} nachbauen</Text>
             
-            <ColorPicker value={guess} onChange={handleGuessChange} />
+            <ColorPicker
+              hue={guessH}
+              saturation={guessS}
+              brightness={guessB}
+              onHueChange={setGuessH}
+              onSatChange={setGuessS}
+              onBriChange={setGuessB}
+            />
 
             <TouchableOpacity style={styles.primaryButton} onPress={submitGuess}>
               <Text style={styles.primaryButtonText}>
@@ -836,7 +815,6 @@ const styles = StyleSheet.create({
   sliderTrack: {
     height: 36,
     borderRadius: 18,
-    overflow: 'visible',
     position: 'relative',
   },
   gradientContainer: {
@@ -854,7 +832,6 @@ const styles = StyleSheet.create({
     top: 4,
     width: 28,
     height: 28,
-    marginLeft: -14,
     backgroundColor: '#fff',
     borderRadius: 14,
     shadowColor: '#000',
