@@ -15,7 +15,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.weblity.colormind",
-      "buildNumber": "20"
+      "buildNumber": "21"
     },
     "android": {
       "adaptiveIcon": {

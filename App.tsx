@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   StyleSheet,
   View,
@@ -106,12 +106,66 @@ const getEmoji = (p: number): string => {
   return '⭐';
 };
 
-// Rainbow colors for smooth hue gradient
 const HUE_GRADIENT: readonly string[] = [
   '#ff0000', '#ff8000', '#ffff00', '#80ff00',
   '#00ff00', '#00ff80', '#00ffff', '#0080ff',
   '#0000ff', '#8000ff', '#ff00ff', '#ff0080', '#ff0000'
 ] as const;
+
+// ============================================================================
+// SLIDER COMPONENT
+// ============================================================================
+
+interface SliderProps {
+  label: string;
+  value: number;
+  max: number;
+  colors: string[];
+  onChange: (value: number) => void;
+}
+
+const Slider: React.FC<SliderProps> = ({ label, value, max, colors, onChange }) => {
+  const trackRef = useRef<View>(null);
+  const trackX = useRef(0);
+
+  const updateValue = (pageX: number) => {
+    const x = pageX - trackX.current;
+    const percentage = Math.max(0, Math.min(1, x / TRACK_WIDTH));
+    onChange(Math.round(percentage * max));
+  };
+
+  const handleLayout = () => {
+    trackRef.current?.measureInWindow((x) => {
+      trackX.current = x;
+    });
+  };
+
+  return (
+    <View style={styles.sliderContainer}>
+      <View style={styles.sliderHeader}>
+        <Text style={styles.sliderLabel}>{label}</Text>
+        <Text style={styles.sliderValue}>{value}{max === 360 ? '°' : '%'}</Text>
+      </View>
+      <View
+        ref={trackRef}
+        style={styles.sliderTrack}
+        onLayout={handleLayout}
+        onStartShouldSetResponder={() => true}
+        onMoveShouldSetResponder={() => true}
+        onResponderGrant={(e) => updateValue(e.nativeEvent.pageX)}
+        onResponderMove={(e) => updateValue(e.nativeEvent.pageX)}
+      >
+        <LinearGradient
+          colors={colors as unknown as string[]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 0 }}
+          style={styles.gradient}
+        />
+        <View style={[styles.thumb, { left: (value / max) * TRACK_WIDTH - 14 }]} />
+      </View>
+    </View>
+  );
+};
 
 // ============================================================================
 // COLOR PICKER
@@ -130,12 +184,6 @@ const ColorPicker: React.FC<ColorPickerProps> = ({
   hue, saturation, brightness,
   onHueChange, onSatChange, onBriChange
 }) => {
-  const handleSliderTouch = (e: any, max: number, setter: (v: number) => void) => {
-    const x = e.nativeEvent.locationX;
-    const percentage = Math.max(0, Math.min(1, x / TRACK_WIDTH));
-    setter(Math.round(percentage * max));
-  };
-
   const satStart = hsbToHex(hue, 0, brightness);
   const satEnd = hsbToHex(hue, 100, brightness);
   const briStart = hsbToHex(hue, saturation, 0);
@@ -148,74 +196,29 @@ const ColorPicker: React.FC<ColorPickerProps> = ({
       </View>
 
       <View style={styles.slidersCard}>
-        {/* HUE */}
-        <View style={styles.sliderContainer}>
-          <View style={styles.sliderHeader}>
-            <Text style={styles.sliderLabel}>Farbton</Text>
-            <Text style={styles.sliderValue}>{hue}°</Text>
-          </View>
-          <View 
-            style={styles.sliderTrack}
-            onStartShouldSetResponder={() => true}
-            onMoveShouldSetResponder={() => true}
-            onResponderGrant={(e) => handleSliderTouch(e, 360, onHueChange)}
-            onResponderMove={(e) => handleSliderTouch(e, 360, onHueChange)}
-          >
-            <LinearGradient
-              colors={HUE_GRADIENT as unknown as string[]}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 0 }}
-              style={styles.gradient}
-            />
-            <View style={[styles.thumb, { left: (hue / 360) * TRACK_WIDTH - 14 }]} />
-          </View>
-        </View>
-
-        {/* SATURATION */}
-        <View style={styles.sliderContainer}>
-          <View style={styles.sliderHeader}>
-            <Text style={styles.sliderLabel}>Sättigung</Text>
-            <Text style={styles.sliderValue}>{saturation}%</Text>
-          </View>
-          <View 
-            style={styles.sliderTrack}
-            onStartShouldSetResponder={() => true}
-            onMoveShouldSetResponder={() => true}
-            onResponderGrant={(e) => handleSliderTouch(e, 100, onSatChange)}
-            onResponderMove={(e) => handleSliderTouch(e, 100, onSatChange)}
-          >
-            <LinearGradient
-              colors={[satStart, satEnd]}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 0 }}
-              style={styles.gradient}
-            />
-            <View style={[styles.thumb, { left: (saturation / 100) * TRACK_WIDTH - 14 }]} />
-          </View>
-        </View>
-
-        {/* BRIGHTNESS */}
-        <View style={styles.sliderContainer}>
-          <View style={styles.sliderHeader}>
-            <Text style={styles.sliderLabel}>Helligkeit</Text>
-            <Text style={styles.sliderValue}>{brightness}%</Text>
-          </View>
-          <View 
-            style={styles.sliderTrack}
-            onStartShouldSetResponder={() => true}
-            onMoveShouldSetResponder={() => true}
-            onResponderGrant={(e) => handleSliderTouch(e, 100, onBriChange)}
-            onResponderMove={(e) => handleSliderTouch(e, 100, onBriChange)}
-          >
-            <LinearGradient
-              colors={[briStart, briEnd]}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 0 }}
-              style={styles.gradient}
-            />
-            <View style={[styles.thumb, { left: (brightness / 100) * TRACK_WIDTH - 14 }]} />
-          </View>
-        </View>
+        <Slider
+          label="Farbton"
+          value={hue}
+          max={360}
+          colors={HUE_GRADIENT as unknown as string[]}
+          onChange={onHueChange}
+        />
+        
+        <Slider
+          label="Sättigung"
+          value={saturation}
+          max={100}
+          colors={[satStart, satEnd]}
+          onChange={onSatChange}
+        />
+        
+        <Slider
+          label="Helligkeit"
+          value={brightness}
+          max={100}
+          colors={[briStart, briEnd]}
+          onChange={onBriChange}
+        />
       </View>
     </View>
   );
@@ -668,7 +671,6 @@ const styles = StyleSheet.create({
   content: { flex: 1 },
   contentInner: { paddingHorizontal: 24, paddingBottom: 50 },
 
-  // Menu
   menuContainer: { alignItems: 'center', paddingTop: 30 },
   menuTitle: {
     fontSize: 28,
@@ -696,7 +698,6 @@ const styles = StyleSheet.create({
   modeSubtitle: { fontSize: 13, color: 'rgba(255,255,255,0.7)', marginTop: 2 },
   disabledButton: { opacity: 0.5 },
 
-  // Room
   roomContainer: { alignItems: 'center', paddingTop: 40 },
   roomTitle: { fontSize: 24, fontWeight: '800', color: '#fff', marginBottom: 24 },
   codeDisplay: {
@@ -727,7 +728,6 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
 
-  // Buttons
   primaryButton: {
     backgroundColor: '#2997ff',
     paddingVertical: 16,
@@ -749,7 +749,6 @@ const styles = StyleSheet.create({
   },
   secondaryButtonText: { fontSize: 16, fontWeight: '600', color: '#fff' },
 
-  // Badge
   badge: {
     backgroundColor: 'rgba(255,255,255,0.1)',
     paddingVertical: 6,
@@ -759,7 +758,6 @@ const styles = StyleSheet.create({
   },
   badgeText: { fontSize: 13, fontWeight: '600', color: 'rgba(255,255,255,0.7)' },
 
-  // Game
   gameContainer: { alignItems: 'center', paddingTop: 10 },
   progressRow: { flexDirection: 'row', gap: 8, marginBottom: 12 },
   progressDot: {
@@ -780,7 +778,6 @@ const styles = StyleSheet.create({
   },
   hint: { fontSize: 14, color: 'rgba(255,255,255,0.4)' },
 
-  // Color Picker
   pickerContainer: { width: '100%', marginVertical: 12 },
   previewContainer: { alignItems: 'center', marginBottom: 16 },
   colorPreview: { width: 80, height: 80, borderRadius: 20 },
@@ -790,7 +787,6 @@ const styles = StyleSheet.create({
     padding: 16,
   },
 
-  // Slider
   sliderContainer: { marginBottom: 20 },
   sliderHeader: { 
     flexDirection: 'row', 
@@ -832,7 +828,6 @@ const styles = StyleSheet.create({
     elevation: 5,
   },
 
-  // Results
   resultsContainer: { alignItems: 'center', paddingTop: 10 },
   resultsEmoji: { fontSize: 56 },
   totalScore: { fontSize: 64, fontWeight: '800', color: '#fff' },
