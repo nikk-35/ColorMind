@@ -17,6 +17,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import { supabase, Profile, Score } from './src/supabase';
 import { initializeAds, loadInterstitial, showInterstitial, BannerAd, BannerAdSize, AD_IDS } from './src/ads';
+import { initializePurchases, checkPremiumStatus, purchasePremium, restorePurchases } from './src/purchases';
 
 const { width } = Dimensions.get('window');
 const TRACK_WIDTH = width - 80;
@@ -300,16 +301,42 @@ export default function App() {
     return () => subscription.unsubscribe();
   }, []);
 
-  // Initialize ads
+  // Initialize ads & purchases
   const initAds = async () => {
     try {
-      const success = await initializeAds();
-      if (success) {
-        setAdsReady(true);
-        loadInterstitial();
+      // Init purchases first
+      await initializePurchases(user?.id);
+      const premium = await checkPremiumStatus();
+      setIsPremium(premium);
+      
+      // Only init ads if not premium
+      if (!premium) {
+        const success = await initializeAds();
+        if (success) {
+          setAdsReady(true);
+          loadInterstitial();
+        }
       }
     } catch (error) {
-      console.log('Ads init error:', error);
+      console.log('Init error:', error);
+    }
+  };
+
+  const handlePurchase = async () => {
+    const success = await purchasePremium();
+    if (success) {
+      setIsPremium(true);
+      Alert.alert('Erfolg! 🎉', 'Werbung wurde entfernt!');
+    }
+  };
+
+  const handleRestore = async () => {
+    const success = await restorePurchases();
+    if (success) {
+      setIsPremium(true);
+      Alert.alert('Erfolg!', 'Käufe wiederhergestellt!');
+    } else {
+      Alert.alert('Info', 'Keine Käufe gefunden.');
     }
   };
 
@@ -718,9 +745,14 @@ export default function App() {
               </View>
               
               {!isPremium && (
-                <TouchableOpacity style={styles.premiumButton} onPress={() => Alert.alert('Premium', 'Werbung entfernen für €2.99\n\nKommt bald!')}>
-                  <Text style={styles.premiumButtonText}>✨ Werbung entfernen</Text>
-                </TouchableOpacity>
+                <View style={styles.premiumSection}>
+                  <TouchableOpacity style={styles.premiumButton} onPress={handlePurchase}>
+                    <Text style={styles.premiumButtonText}>✨ Werbung entfernen — €2,99</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={handleRestore}>
+                    <Text style={styles.restoreText}>Käufe wiederherstellen</Text>
+                  </TouchableOpacity>
+                </View>
               )}
             </View>
           </ScrollView>
@@ -990,6 +1022,8 @@ const styles = StyleSheet.create({
 
   // Ads & Premium
   bannerContainer: { position: 'absolute', bottom: 0, left: 0, right: 0, alignItems: 'center', backgroundColor: '#0a0a1a' },
-  premiumButton: { marginTop: 24, backgroundColor: 'rgba(255,215,0,0.2)', paddingVertical: 14, paddingHorizontal: 24, borderRadius: 24, borderWidth: 1, borderColor: 'rgba(255,215,0,0.5)' },
+  premiumSection: { alignItems: 'center', marginTop: 24 },
+  premiumButton: { backgroundColor: 'rgba(255,215,0,0.2)', paddingVertical: 14, paddingHorizontal: 24, borderRadius: 24, borderWidth: 1, borderColor: 'rgba(255,215,0,0.5)' },
   premiumButtonText: { color: '#ffd700', fontSize: 15, fontWeight: '600' },
+  restoreText: { color: 'rgba(255,255,255,0.4)', fontSize: 13, marginTop: 12 },
 });
