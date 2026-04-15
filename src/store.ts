@@ -1,32 +1,51 @@
-import * as InAppPurchases from 'expo-in-app-purchases';
 import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import {
+  initConnection,
+  endConnection,
+  getProducts,
+  requestPurchase,
+  getAvailablePurchases,
+  finishTransaction,
+  purchaseUpdatedListener,
+  purchaseErrorListener,
+  type ProductPurchase,
+  type PurchaseError,
+} from 'react-native-iap';
 
 const PRODUCT_ID = 'com.weblity.colormind.adfree';
 const PREMIUM_KEY = '@colormind_premium';
 
 let isConnected = false;
+let purchaseUpdateSubscription: any = null;
+let purchaseErrorSubscription: any = null;
+
+// Callback for when premium is purchased
+let onPremiumPurchased: (() => void) | null = null;
+
+export const setOnPremiumPurchased = (callback: () => void) => {
+  onPremiumPurchased = callback;
+};
 
 export const initStore = async (): Promise<boolean> => {
   if (Platform.OS === 'web') return false;
   if (isConnected) return true;
   
   try {
-    await InAppPurchases.connectAsync();
+    await initConnection();
     isConnected = true;
     
-    // Set up purchase listener
-    InAppPurchases.setPurchaseListener(({ responseCode, results }) => {
-      if (responseCode === InAppPurchases.IAPResponseCode.OK && results) {
-        for (const purchase of results) {
-          if (!purchase.acknowledged) {
-            // Finish the transaction
-            InAppPurchases.finishTransactionAsync(purchase, true);
-            // Save premium status
-            savePremiumStatus(true);
-          }
-        }
+    // Listen for purchases
+    purchaseUpdateSubscription = purchaseUpdatedListener(async (purchase: ProductPurchase) => {
+      if (purchase.productId === PRODUCT_ID) {
+        await finishTransaction({ purchase, isConsumable: false });
+        await savePremiumStatus(true);
+        if (onPremiumPurchased) onPremiumPurchased();
       }
+    });
+    
+    purchaseErrorSubscription = purchaseErrorListener((error: PurchaseError) => {
+      console.log('Purchase error:', error);
     });
     
     return true;
@@ -37,8 +56,16 @@ export const initStore = async (): Promise<boolean> => {
 };
 
 export const disconnectStore = async () => {
+  if (purchaseUpdateSubscription) {
+    purchaseUpdateSubscription.remove();
+    purchaseUpdateSubscription = null;
+  }
+  if (purchaseErrorSubscription) {
+    purchaseErrorSubscription.remove();
+    purchaseErrorSubscription = null;
+  }
   if (isConnected) {
-    await InAppPurchases.disconnectAsync();
+    await endConnection();
     isConnected = false;
   }
 };
@@ -51,14 +78,13 @@ export const checkPremium = async (): Promise<boolean> => {
     
     // Check purchase history
     if (!isConnected) await initStore();
-    const { results } = await InAppPurchases.getPurchaseHistoryAsync();
     
-    if (results && results.length > 0) {
-      const hasPremium = results.some(p => p.productId === PRODUCT_ID);
-      if (hasPremium) {
-        await savePremiumStatus(true);
-        return true;
-      }
+    const purchases = await getAvailablePurchases();
+    const hasPremium = purchases.some(p => p.productId === PRODUCT_ID);
+    
+    if (hasPremium) {
+      await savePremiumStatus(true);
+      return true;
     }
     
     return false;
@@ -72,18 +98,18 @@ export const purchasePremium = async (): Promise<boolean> => {
   try {
     if (!isConnected) await initStore();
     
-    // Get product
-    const { results } = await InAppPurchases.getProductsAsync([PRODUCT_ID]);
+    // Get products first
+    const products = await getProducts({ skus: [PRODUCT_ID] });
     
-    if (!results || results.length === 0) {
-      console.log('Product not found');
+    if (!products || products.length === 0) {
+      console.log('Product not found:', PRODUCT_ID);
       return false;
     }
     
-    // Purchase
-    await InAppPurchases.purchaseItemAsync(PRODUCT_ID);
+    // Request purchase
+    await requestPurchase({ sku: PRODUCT_ID });
     
-    // The result comes through the purchase listener
+    // Result comes through listener
     return true;
   } catch (error: any) {
     if (error.code !== 'E_USER_CANCELLED') {
@@ -97,14 +123,12 @@ export const restorePurchases = async (): Promise<boolean> => {
   try {
     if (!isConnected) await initStore();
     
-    const { results } = await InAppPurchases.getPurchaseHistoryAsync();
+    const purchases = await getAvailablePurchases();
+    const hasPremium = purchases.some(p => p.productId === PRODUCT_ID);
     
-    if (results && results.length > 0) {
-      const hasPremium = results.some(p => p.productId === PRODUCT_ID);
-      if (hasPremium) {
-        await savePremiumStatus(true);
-        return true;
-      }
+    if (hasPremium) {
+      await savePremiumStatus(true);
+      return true;
     }
     
     return false;
@@ -122,10 +146,10 @@ export const getProductPrice = async (): Promise<string> => {
   try {
     if (!isConnected) await initStore();
     
-    const { results } = await InAppPurchases.getProductsAsync([PRODUCT_ID]);
+    const products = await getProducts({ skus: [PRODUCT_ID] });
     
-    if (results && results.length > 0) {
-      return results[0].price;
+    if (products && products.length > 0) {
+      return products[0].localizedPrice || '€2,99';
     }
     
     return '€2,99';

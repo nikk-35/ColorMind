@@ -15,7 +15,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.weblity.colormind",
-      "buildNumber": "26",
+      "buildNumber": "27",
       "config": {
         "googleMobileAdsAppId": "ca-app-pub-9254337095601557~3384473164"
       }
@@ -42,7 +42,8 @@
           "androidAppId": "ca-app-pub-9254337095601557~3384473164",
           "iosAppId": "ca-app-pub-9254337095601557~3384473164"
         }
-      ]
+      ],
+      "react-native-iap"
     ],
     "extra": {
       "eas": {}

@@ -17,7 +17,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import { supabase, Profile, Score } from './src/supabase';
 import { initializeAds, loadInterstitial, showInterstitial, BannerAd, BannerAdSize, AD_IDS } from './src/ads';
-import { initStore, checkPremium, purchasePremium, restorePurchases } from './src/store';
+import { initStore, checkPremium, purchasePremium, restorePurchases, setOnPremiumPurchased } from './src/store';
 
 const { width } = Dimensions.get('window');
 const TRACK_WIDTH = width - 80;
@@ -306,6 +306,13 @@ export default function App() {
     try {
       // Init store & check premium
       await initStore();
+      
+      // Set callback for when premium is purchased
+      setOnPremiumPurchased(() => {
+        setIsPremium(true);
+        Alert.alert('Erfolg! 🎉', 'Werbung wurde entfernt!');
+      });
+      
       const premium = await checkPremium();
       setIsPremium(premium);
       
