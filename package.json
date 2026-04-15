@@ -16,6 +16,7 @@
     "expo": "~55.0.8",
     "expo-apple-authentication": "^55.0.13",
     "expo-crypto": "^55.0.14",
+    "expo-in-app-purchases": "^14.5.0",
     "expo-linear-gradient": "^55.0.13",
     "expo-status-bar": "~55.0.4",
     "react": "19.2.0",
