@@ -13,7 +13,7 @@ import {
   type PurchaseError,
 } from 'react-native-iap';
 
-const PRODUCT_ID = 'com.weblity.colormind.adfree';
+const PRODUCT_ID = 'com.weblity.colormind.premium';
 const PREMIUM_KEY = '@colormind_premium';
 
 let isConnected = false;
