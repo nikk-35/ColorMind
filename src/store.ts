@@ -1,17 +1,29 @@
 import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import {
-  initConnection,
-  endConnection,
-  getProducts,
-  requestPurchase,
-  getAvailablePurchases,
-  finishTransaction,
-  purchaseUpdatedListener,
-  purchaseErrorListener,
-  type ProductPurchase,
-  type PurchaseError,
-} from 'react-native-iap';
+
+const isWeb = Platform.OS === 'web';
+
+// Only import IAP on native platforms
+let initConnection: any;
+let endConnection: any;
+let getProducts: any;
+let requestPurchase: any;
+let getAvailablePurchases: any;
+let finishTransaction: any;
+let purchaseUpdatedListener: any;
+let purchaseErrorListener: any;
+
+if (!isWeb) {
+  const iapModule = require('react-native-iap');
+  initConnection = iapModule.initConnection;
+  endConnection = iapModule.endConnection;
+  getProducts = iapModule.getProducts;
+  requestPurchase = iapModule.requestPurchase;
+  getAvailablePurchases = iapModule.getAvailablePurchases;
+  finishTransaction = iapModule.finishTransaction;
+  purchaseUpdatedListener = iapModule.purchaseUpdatedListener;
+  purchaseErrorListener = iapModule.purchaseErrorListener;
+}
 
 const PRODUCT_ID = 'com.weblity.colormind.premium';
 const PREMIUM_KEY = '@colormind_premium';
@@ -28,7 +40,7 @@ export const setOnPremiumPurchased = (callback: () => void) => {
 };
 
 export const initStore = async (): Promise<boolean> => {
-  if (Platform.OS === 'web') return false;
+  if (isWeb) return false;
   if (isConnected) return true;
   
   try {
@@ -36,7 +48,7 @@ export const initStore = async (): Promise<boolean> => {
     isConnected = true;
     
     // Listen for purchases
-    purchaseUpdateSubscription = purchaseUpdatedListener(async (purchase: ProductPurchase) => {
+    purchaseUpdateSubscription = purchaseUpdatedListener(async (purchase: any) => {
       if (purchase.productId === PRODUCT_ID) {
         await finishTransaction({ purchase, isConsumable: false });
         await savePremiumStatus(true);
@@ -44,7 +56,7 @@ export const initStore = async (): Promise<boolean> => {
       }
     });
     
-    purchaseErrorSubscription = purchaseErrorListener((error: PurchaseError) => {
+    purchaseErrorSubscription = purchaseErrorListener((error: any) => {
       console.log('Purchase error:', error);
     });
     
@@ -56,6 +68,7 @@ export const initStore = async (): Promise<boolean> => {
 };
 
 export const disconnectStore = async () => {
+  if (isWeb) return;
   if (purchaseUpdateSubscription) {
     purchaseUpdateSubscription.remove();
     purchaseUpdateSubscription = null;
@@ -76,11 +89,14 @@ export const checkPremium = async (): Promise<boolean> => {
     const stored = await AsyncStorage.getItem(PREMIUM_KEY);
     if (stored === 'true') return true;
     
+    // On web, just return false (no IAP)
+    if (isWeb) return false;
+    
     // Check purchase history
     if (!isConnected) await initStore();
     
     const purchases = await getAvailablePurchases();
-    const hasPremium = purchases.some(p => p.productId === PRODUCT_ID);
+    const hasPremium = purchases.some((p: any) => p.productId === PRODUCT_ID);
     
     if (hasPremium) {
       await savePremiumStatus(true);
@@ -95,6 +111,8 @@ export const checkPremium = async (): Promise<boolean> => {
 };
 
 export const purchasePremium = async (): Promise<boolean> => {
+  if (isWeb) return false;
+  
   try {
     if (!isConnected) await initStore();
     
@@ -120,11 +138,13 @@ export const purchasePremium = async (): Promise<boolean> => {
 };
 
 export const restorePurchases = async (): Promise<boolean> => {
+  if (isWeb) return false;
+  
   try {
     if (!isConnected) await initStore();
     
     const purchases = await getAvailablePurchases();
-    const hasPremium = purchases.some(p => p.productId === PRODUCT_ID);
+    const hasPremium = purchases.some((p: any) => p.productId === PRODUCT_ID);
     
     if (hasPremium) {
       await savePremiumStatus(true);
@@ -143,6 +163,8 @@ const savePremiumStatus = async (isPremium: boolean) => {
 };
 
 export const getProductPrice = async (): Promise<string> => {
+  if (isWeb) return '€2,99';
+  
   try {
     if (!isConnected) await initStore();
     

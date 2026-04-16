@@ -1,25 +1,40 @@
 import { Platform } from 'react-native';
-import mobileAds, { 
-  BannerAd, 
-  BannerAdSize, 
-  InterstitialAd, 
-  AdEventType,
-  TestIds 
-} from 'react-native-google-mobile-ads';
+
+// Web doesn't support mobile ads
+const isWeb = Platform.OS === 'web';
+
+// Only import mobile ads on native platforms
+let mobileAds: any;
+let BannerAd: any;
+let BannerAdSize: any;
+let InterstitialAd: any;
+let AdEventType: any;
+let TestIds: any;
+
+if (!isWeb) {
+  const adsModule = require('react-native-google-mobile-ads');
+  mobileAds = adsModule.default;
+  BannerAd = adsModule.BannerAd;
+  BannerAdSize = adsModule.BannerAdSize;
+  InterstitialAd = adsModule.InterstitialAd;
+  AdEventType = adsModule.AdEventType;
+  TestIds = adsModule.TestIds;
+}
 
 // Use test IDs until app is published and AdMob approved
 // Change USE_TEST_ADS to false after AdMob starts serving real ads
 const USE_TEST_ADS = true;
 
 export const AD_IDS = {
-  banner: USE_TEST_ADS ? TestIds.BANNER : 'ca-app-pub-9254337095601557/8035819607',
-  interstitial: USE_TEST_ADS ? TestIds.INTERSTITIAL : 'ca-app-pub-9254337095601557/2775754061',
+  banner: !isWeb && USE_TEST_ADS ? TestIds?.BANNER : 'ca-app-pub-9254337095601557/8035819607',
+  interstitial: !isWeb && USE_TEST_ADS ? TestIds?.INTERSTITIAL : 'ca-app-pub-9254337095601557/2775754061',
 };
 
 // Initialize ads
 let adsInitialized = false;
 
 export const initializeAds = async (): Promise<boolean> => {
+  if (isWeb) return false;
   if (adsInitialized) return true;
   
   try {
