@@ -562,7 +562,7 @@ export default function App() {
       setScores(sc);
       const total = sc.reduce((a, b) => a + b, 0);
       
-      // Save score to database
+      // Save score to database (always save with today's date for leaderboard)
       if (profile) {
         try {
           await supabase.from('scores').insert({
@@ -570,7 +570,7 @@ export default function App() {
             username: profile.username,
             score: total,
             mode: mode,
-            date: mode === 'daily' ? getTodayString() : null,
+            date: getTodayString(),
           });
         } catch {}
       }
@@ -622,7 +622,8 @@ export default function App() {
         .limit(50);
       
       if (lbMode === 'daily') {
-        query = query.eq('mode', 'daily').eq('date', getTodayString());
+        // Show all scores from today (any mode)
+        query = query.eq('date', getTodayString());
       }
       
       const { data } = await query;

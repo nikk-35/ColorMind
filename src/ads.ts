@@ -7,12 +7,13 @@ import mobileAds, {
   TestIds 
 } from 'react-native-google-mobile-ads';
 
-// Use test IDs in development, real IDs in production
-const IS_DEV = __DEV__;
+// Use test IDs until app is published and AdMob approved
+// Change USE_TEST_ADS to false after AdMob starts serving real ads
+const USE_TEST_ADS = true;
 
 export const AD_IDS = {
-  banner: IS_DEV ? TestIds.BANNER : 'ca-app-pub-9254337095601557/8035819607',
-  interstitial: IS_DEV ? TestIds.INTERSTITIAL : 'ca-app-pub-9254337095601557/2775754061',
+  banner: USE_TEST_ADS ? TestIds.BANNER : 'ca-app-pub-9254337095601557/8035819607',
+  interstitial: USE_TEST_ADS ? TestIds.INTERSTITIAL : 'ca-app-pub-9254337095601557/2775754061',
 };
 
 // Initialize ads
