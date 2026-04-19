@@ -14,7 +14,8 @@ import {
   Platform,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import * as AppleAuthentication from 'expo-apple-authentication';
+// Apple Auth disabled for now - causes review rejection
+// import * as AppleAuthentication from 'expo-apple-authentication';
 import { supabase, Profile, Score } from './src/supabase';
 import { initializeAds, loadInterstitial, showInterstitial, BannerAd, BannerAdSize, AD_IDS } from './src/ads';
 import { initStore, checkPremium, purchasePremium, restorePurchases, setOnPremiumPurchased } from './src/store';
@@ -688,6 +689,7 @@ export default function App() {
             </TouchableOpacity>
           </View>
           
+          {/* Apple Sign-In disabled for now - causes App Store rejection
           {Platform.OS === 'ios' && (
             <AppleAuthentication.AppleAuthenticationButton
               buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN}
@@ -697,6 +699,7 @@ export default function App() {
               onPress={signInWithApple}
             />
           )}
+          */}
         </ScrollView>
       )}
 
