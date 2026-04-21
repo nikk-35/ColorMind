@@ -359,10 +359,11 @@ export default function App() {
         setUser(session.user);
         await loadProfile(session.user.id);
       } else {
-        setScreen('auth');
+        // No login required - go straight to menu
+        setScreen('menu');
       }
     } catch (error) {
-      setScreen('auth');
+      setScreen('menu');
     }
   };
 
@@ -730,9 +731,13 @@ export default function App() {
             <TouchableOpacity onPress={goToMenu} style={styles.closeBtn}>
               <Text style={styles.closeBtnText}>✕</Text>
             </TouchableOpacity>
-          ) : (
+          ) : profile ? (
             <TouchableOpacity onPress={signOut}>
-              <Text style={styles.usernameText}>@{profile?.username}</Text>
+              <Text style={styles.usernameText}>@{profile.username}</Text>
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity onPress={() => setScreen('auth')}>
+              <Text style={styles.usernameText}>Anmelden</Text>
             </TouchableOpacity>
           )}
         </View>
@@ -751,12 +756,18 @@ export default function App() {
                   icon="📅" 
                   title="Daily Challenge" 
                   subtitle={dailyPlayed ? `Heute: ${dailyScore?.toFixed(1)}/50` : "Gleiche Farben für alle"} 
-                  color={dailyPlayed ? '#444' : '#00a67d'} 
+                  color={(dailyPlayed && profile) ? '#444' : '#00a67d'} 
                   onPress={() => startGame('daily')} 
-                  disabled={dailyPlayed} 
+                  disabled={dailyPlayed && !!profile} 
                 />
                 <ModeButton icon="👥" title="Multiplayer" subtitle="Fordere Freunde heraus" color="#ff6b35" onPress={() => setScreen('multiplayer-menu')} />
-                <ModeButton icon="🏆" title="Leaderboard" subtitle="Top Spieler" color="#8b5cf6" onPress={() => loadLeaderboard('daily')} />
+                <ModeButton 
+                  icon="🏆" 
+                  title="Leaderboard" 
+                  subtitle={profile ? "Top Spieler" : "Anmelden zum Ansehen"} 
+                  color="#8b5cf6" 
+                  onPress={() => profile ? loadLeaderboard('daily') : setScreen('auth')} 
+                />
               </View>
               
               {!isPremium && (
