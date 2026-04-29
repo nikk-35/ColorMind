@@ -18,7 +18,8 @@ import { LinearGradient } from 'expo-linear-gradient';
 // import * as AppleAuthentication from 'expo-apple-authentication';
 import { supabase, Profile, Score } from './src/supabase';
 import { initializeAds, loadInterstitial, showInterstitial, BannerAd, BannerAdSize, AD_IDS } from './src/ads';
-import { initStore, checkPremium, purchasePremium, restorePurchases, setOnPremiumPurchased } from './src/store';
+// IAP removed for v1.0 - will add back in v1.1
+// import { initStore, checkPremium, purchasePremium, restorePurchases, setOnPremiumPurchased } from './src/store';
 
 const { width } = Dimensions.get('window');
 const TRACK_WIDTH = width - 80;
@@ -302,54 +303,50 @@ export default function App() {
     return () => subscription.unsubscribe();
   }, []);
 
-  // Initialize ads & store
+  // Initialize ads (IAP removed for v1.0)
   const initAds = async () => {
     try {
-      // Init store & check premium
-      await initStore();
-      
-      // Set callback for when premium is purchased
-      setOnPremiumPurchased(() => {
-        setIsPremium(true);
-        Alert.alert('Erfolg! 🎉', 'Werbung wurde entfernt!');
-      });
-      
-      const premium = await checkPremium();
-      setIsPremium(premium);
-      
-      // Only init ads if not premium
-      if (!premium) {
-        const success = await initializeAds();
-        if (success) {
-          setAdsReady(true);
-          loadInterstitial();
-        }
+      const success = await initializeAds();
+      if (success) {
+        setAdsReady(true);
+        loadInterstitial();
       }
     } catch (error) {
-      console.log('Init error:', error);
+      console.log('Ads init error:', error);
     }
   };
 
-  const handlePurchase = async () => {
-    const success = await purchasePremium();
-    if (success) {
-      // Check again after purchase
-      const premium = await checkPremium();
-      if (premium) {
-        setIsPremium(true);
-        Alert.alert('Erfolg! 🎉', 'Werbung wurde entfernt!');
-      }
-    }
-  };
-
-  const handleRestore = async () => {
-    const success = await restorePurchases();
-    if (success) {
-      setIsPremium(true);
-      Alert.alert('Erfolg!', 'Käufe wiederhergestellt!');
-    } else {
-      Alert.alert('Info', 'Keine Käufe gefunden.');
-    }
+  // Delete account function (required by Apple)
+  const deleteAccount = async () => {
+    Alert.alert(
+      'Account löschen',
+      'Bist du sicher? Alle deine Daten werden unwiderruflich gelöscht.',
+      [
+        { text: 'Abbrechen', style: 'cancel' },
+        {
+          text: 'Löschen',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              if (user && profile) {
+                // Delete scores
+                await supabase.from('scores').delete().eq('user_id', user.id);
+                // Delete profile
+                await supabase.from('profiles').delete().eq('id', user.id);
+              }
+              // Sign out
+              await supabase.auth.signOut();
+              setUser(null);
+              setProfile(null);
+              setScreen('menu');
+              Alert.alert('Fertig', 'Dein Account wurde gelöscht.');
+            } catch (error) {
+              Alert.alert('Fehler', 'Account konnte nicht gelöscht werden.');
+            }
+          }
+        }
+      ]
+    );
   };
 
   const checkSession = async () => {
@@ -732,7 +729,17 @@ export default function App() {
               <Text style={styles.closeBtnText}>✕</Text>
             </TouchableOpacity>
           ) : profile ? (
-            <TouchableOpacity onPress={signOut}>
+            <TouchableOpacity onPress={() => {
+              Alert.alert(
+                `@${profile.username}`,
+                'Account-Optionen',
+                [
+                  { text: 'Abbrechen', style: 'cancel' },
+                  { text: 'Abmelden', onPress: signOut },
+                  { text: 'Account löschen', style: 'destructive', onPress: deleteAccount }
+                ]
+              );
+            }}>
               <Text style={styles.usernameText}>@{profile.username}</Text>
             </TouchableOpacity>
           ) : (
@@ -770,16 +777,7 @@ export default function App() {
                 />
               </View>
               
-              {!isPremium && (
-                <View style={styles.premiumSection}>
-                  <TouchableOpacity style={styles.premiumButton} onPress={handlePurchase}>
-                    <Text style={styles.premiumButtonText}>✨ Werbung entfernen — €2,99</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity onPress={handleRestore}>
-                    <Text style={styles.restoreText}>Käufe wiederherstellen</Text>
-                  </TouchableOpacity>
-                </View>
-              )}
+              {/* IAP removed for v1.0 - will be added in v1.1 */}
             </View>
           </ScrollView>
           
