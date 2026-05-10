@@ -35,7 +35,7 @@ interface HSBColor {
 }
 
 type GameMode = 'solo' | 'daily' | 'multiplayer';
-type Screen = 'loading' | 'auth' | 'username' | 'menu' | 'multiplayer-menu' | 'create-room' | 'join-room' | 'memorize' | 'recall' | 'results' | 'leaderboard';
+type Screen = 'loading' | 'auth' | 'username' | 'menu' | 'multiplayer-menu' | 'create-room' | 'join-room' | 'memorize' | 'recall' | 'results' | 'leaderboard' | 'settings';
 
 // ============================================================================
 // COLOR UTILITIES
@@ -724,27 +724,17 @@ export default function App() {
       {!['loading', 'auth', 'username'].includes(screen) && (
         <View style={styles.header}>
           <Text style={styles.logo}>Color<Text style={styles.logoAccent}>Mind</Text></Text>
-          {screen !== 'menu' ? (
+          {screen === 'menu' ? (
+            <TouchableOpacity onPress={() => profile ? setScreen('settings') : setScreen('auth')} style={styles.settingsBtn}>
+              <Text style={styles.settingsBtnText}>{profile ? '⚙️' : '👤'}</Text>
+            </TouchableOpacity>
+          ) : screen === 'settings' ? (
             <TouchableOpacity onPress={goToMenu} style={styles.closeBtn}>
               <Text style={styles.closeBtnText}>✕</Text>
             </TouchableOpacity>
-          ) : profile ? (
-            <TouchableOpacity onPress={() => {
-              Alert.alert(
-                `@${profile.username}`,
-                'Account-Optionen',
-                [
-                  { text: 'Abbrechen', style: 'cancel' },
-                  { text: 'Abmelden', onPress: signOut },
-                  { text: 'Account löschen', style: 'destructive', onPress: deleteAccount }
-                ]
-              );
-            }}>
-              <Text style={styles.usernameText}>@{profile.username}</Text>
-            </TouchableOpacity>
           ) : (
-            <TouchableOpacity onPress={() => setScreen('auth')}>
-              <Text style={styles.usernameText}>Anmelden</Text>
+            <TouchableOpacity onPress={goToMenu} style={styles.closeBtn}>
+              <Text style={styles.closeBtnText}>✕</Text>
             </TouchableOpacity>
           )}
         </View>
@@ -939,6 +929,44 @@ export default function App() {
           </View>
         </ScrollView>
       )}
+
+      {/* SETTINGS */}
+      {screen === 'settings' && profile && (
+        <ScrollView style={styles.content} contentContainerStyle={styles.contentInner}>
+          <View style={styles.settingsContainer}>
+            <Text style={styles.settingsTitle}>⚙️ Einstellungen</Text>
+            
+            {/* Account Info */}
+            <View style={styles.settingsCard}>
+              <Text style={styles.settingsLabel}>Account</Text>
+              <View style={styles.settingsRow}>
+                <Text style={styles.settingsRowLabel}>Username</Text>
+                <Text style={styles.settingsRowValue}>@{profile.username}</Text>
+              </View>
+              <View style={styles.settingsRow}>
+                <Text style={styles.settingsRowLabel}>E-Mail</Text>
+                <Text style={styles.settingsRowValue}>{user?.email || '-'}</Text>
+              </View>
+            </View>
+            
+            {/* Sign Out */}
+            <TouchableOpacity style={styles.settingsButton} onPress={signOut}>
+              <Text style={styles.settingsButtonText}>🚪 Abmelden</Text>
+            </TouchableOpacity>
+            
+            {/* Danger Zone */}
+            <View style={styles.settingsDanger}>
+              <Text style={styles.settingsDangerTitle}>⚠️ Gefahrenzone</Text>
+              <Text style={styles.settingsDangerDesc}>
+                Das Löschen deines Accounts entfernt alle deine Daten unwiderruflich.
+              </Text>
+              <TouchableOpacity style={styles.deleteButton} onPress={deleteAccount}>
+                <Text style={styles.deleteButtonText}>🗑️ Account löschen</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </ScrollView>
+      )}
     </View>
   );
 }
@@ -1050,4 +1078,22 @@ const styles = StyleSheet.create({
   premiumButton: { backgroundColor: 'rgba(255,215,0,0.2)', paddingVertical: 14, paddingHorizontal: 24, borderRadius: 24, borderWidth: 1, borderColor: 'rgba(255,215,0,0.5)' },
   premiumButtonText: { color: '#ffd700', fontSize: 15, fontWeight: '600' },
   restoreText: { color: 'rgba(255,255,255,0.4)', fontSize: 13, marginTop: 12 },
+
+  // Settings
+  settingsBtn: { padding: 8 },
+  settingsBtnText: { fontSize: 24 },
+  settingsContainer: { paddingTop: 20 },
+  settingsTitle: { fontSize: 28, fontWeight: '800', color: '#fff', marginBottom: 24 },
+  settingsCard: { backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: 16, padding: 16, marginBottom: 16 },
+  settingsLabel: { fontSize: 12, fontWeight: '600', color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', marginBottom: 12 },
+  settingsRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 8 },
+  settingsRowLabel: { fontSize: 16, color: 'rgba(255,255,255,0.7)' },
+  settingsRowValue: { fontSize: 16, color: '#fff', fontWeight: '600' },
+  settingsButton: { backgroundColor: 'rgba(255,255,255,0.1)', paddingVertical: 16, borderRadius: 12, alignItems: 'center', marginBottom: 24 },
+  settingsButtonText: { fontSize: 16, fontWeight: '600', color: '#fff' },
+  settingsDanger: { backgroundColor: 'rgba(255,59,48,0.1)', borderRadius: 16, padding: 16, borderWidth: 1, borderColor: 'rgba(255,59,48,0.3)' },
+  settingsDangerTitle: { fontSize: 14, fontWeight: '700', color: '#ff3b30', marginBottom: 8 },
+  settingsDangerDesc: { fontSize: 14, color: 'rgba(255,255,255,0.6)', lineHeight: 20, marginBottom: 16 },
+  deleteButton: { backgroundColor: '#ff3b30', paddingVertical: 14, borderRadius: 12, alignItems: 'center' },
+  deleteButtonText: { fontSize: 16, fontWeight: '700', color: '#fff' },
 });
