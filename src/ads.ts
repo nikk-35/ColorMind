@@ -23,7 +23,7 @@ if (!isWeb) {
 
 // Use test IDs until app is published and AdMob approved
 // Change USE_TEST_ADS to false after AdMob starts serving real ads
-const USE_TEST_ADS = true;
+const USE_TEST_ADS = false;
 
 export const AD_IDS = {
   banner: !isWeb && USE_TEST_ADS ? TestIds?.BANNER : 'ca-app-pub-9254337095601557/8035819607',

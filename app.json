@@ -15,7 +15,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.weblity.colormind",
-      "buildNumber": "33",
+      "buildNumber": "34",
       "config": {
         "googleMobileAdsAppId": "ca-app-pub-9254337095601557~3384473164"
       }
